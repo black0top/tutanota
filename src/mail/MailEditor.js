@@ -6,8 +6,8 @@ import type {TextFieldAttrs} from "../gui/base/TextFieldN"
 import {TextFieldN, Type} from "../gui/base/TextFieldN"
 import type {Language, TranslationKey} from "../misc/LanguageViewModel"
 import {_getSubstitutedLanguageCode, getAvailableLanguageCode, lang, languages} from "../misc/LanguageViewModel"
-import {formatStorageSize, stringToNameAndMailAddress} from "../misc/Formatter"
-import type {ConversationTypeEnum} from "../api/common/TutanotaConstants"
+import {formatStorageSize} from "../misc/Formatter"
+import type {CalendarMethodEnum, ConversationTypeEnum} from "../api/common/TutanotaConstants"
 import {
 	ALLOWED_IMAGE_FORMATS,
 	ConversationType,
@@ -18,9 +18,9 @@ import {
 	ReplyType
 } from "../api/common/TutanotaConstants"
 import {animations, height, opacity} from "../gui/animation/Animations"
-import {load, loadAll, setup, update} from "../api/main/Entity"
+import {load, setup, update} from "../api/main/Entity"
 import {worker} from "../api/main/WorkerClient"
-import type {BubbleHandler, Suggestion} from "../gui/base/BubbleTextField"
+import type {Suggestion} from "../gui/base/BubbleTextField"
 import {Bubble, BubbleTextField} from "../gui/base/BubbleTextField"
 import {Editor} from "../gui/base/Editor"
 import {isExternal, recipientInfoType} from "../api/common/RecipientInfo"
@@ -77,7 +77,7 @@ import {showProgressDialog} from "../gui/base/ProgressDialog"
 import type {MailboxDetail} from "./MailModel"
 import {mailModel} from "./MailModel"
 import {locator} from "../api/main/MainLocator"
-import {getContactListName, LazyContactListId, searchForContacts} from "../contacts/ContactUtils"
+import {LazyContactListId} from "../contacts/ContactUtils"
 import {RecipientNotResolvedError} from "../api/common/error/RecipientNotResolvedError"
 import stream from "mithril/stream/stream.js"
 import {checkApprovalStatus} from "../misc/ErrorHandlerImpl"
@@ -102,8 +102,6 @@ import {getTimeZone} from "../calendar/CalendarUtils"
 import {MailAddressBubbleHandler} from "../misc/MailAddressBubbleHandler"
 import {px, size} from "../gui/size"
 import {isMailAddress} from "../misc/FormatValidator"
-import {DbError} from "../api/common/error/DbError"
-import {findRecipients} from "../native/ContactApp"
 import {createApprovalMail} from "../api/entities/monitor/ApprovalMail"
 import {newMouseEvent} from "../gui/HtmlUtils"
 import type {EncryptedMailAddress} from "../api/entities/tutanota/EncryptedMailAddress"
@@ -112,6 +110,13 @@ assertMainOrNode()
 
 export type RecipientList = $ReadOnlyArray<{name: ?string, address: string}>
 export type Recipients = {to?: RecipientList, cc?: RecipientList, bcc?: RecipientList}
+
+type EditorAttachment = TutanotaFile | DataFile | FileReference
+type MailEditorHooks = {
+	beforeSave?: (editor: MailEditor, recipients: Array<RecipientInfo>, body: string) => string,
+	beforeSent?: (editor: MailEditor, attachments: Array<TutanotaFile>) => {calendarFileMethods: Array<[IdTuple, CalendarMethodEnum]>},
+	afterSent?: (editor: MailEditor) => mixed,
+}
 
 export class MailEditor {
 	dialog: Dialog;
@@ -144,6 +149,7 @@ export class MailEditor {
 	_mentionedInlineImages: Array<string>
 	/** HTML elements which correspond to inline images. We need them to check that they are removed/remove them later */
 	_inlineImageElements: Array<HTMLElement>
+	hooks: MailEditorHooks;
 
 	/**
 	 * Creates a new draft message. Invoke initAsResponse or initFromDraft if this message should be a response
@@ -152,9 +158,10 @@ export class MailEditor {
 	 */
 	constructor(mailboxDetails: MailboxDetail) {
 		this.conversationType = ConversationType.NEW
-		this.toRecipients = new BubbleTextField("to_label", new MailAddressBubbleHandler(this))
-		this.ccRecipients = new BubbleTextField("cc_label", new MailAddressBubbleHandler(this))
-		this.bccRecipients = new BubbleTextField("bcc_label", new MailAddressBubbleHandler(this))
+		const bubbleCreator = this.createBubble.bind(this)
+		this.toRecipients = new BubbleTextField("to_label", new MailAddressBubbleHandler(bubbleCreator))
+		this.ccRecipients = new BubbleTextField("cc_label", new MailAddressBubbleHandler(bubbleCreator))
+		this.bccRecipients = new BubbleTextField("bcc_label", new MailAddressBubbleHandler(bubbleCreator))
 		this._replyTos = []
 		this._mailAddressToPasswordField = new Map()
 		this._attachments = []
@@ -167,6 +174,7 @@ export class MailEditor {
 		this._blockExternalContent = true
 		this._mentionedInlineImages = []
 		this._inlineImageElements = []
+		this.hooks = {}
 
 		let props = logins.getUserController().props
 
@@ -329,7 +337,8 @@ export class MailEditor {
 						oncreate: vnode => this.animate(vnode.dom, true),
 						onbeforeremove: vnode => this.animate(vnode.dom, false)
 					}, this._allRecipients()
-					       .filter(r => r.type === recipientInfoType.external && !r.resolveContactPromise) // only show passwords for resolved contacts, otherwise we might not get the password
+					       .filter(r => r.type === recipientInfoType.external
+						       && !r.resolveContactPromise) // only show passwords for resolved contacts, otherwise we might not get the password
 					       .map(r => m(TextFieldN, Object.assign({}, this.getPasswordField(r), {
 						       oncreate: vnode => this.animate(vnode.dom, true),
 						       onbeforeremove: vnode => this.animate(vnode.dom, false)
@@ -867,6 +876,14 @@ export class MailEditor {
 								isApprovalMail = true
 								return recipients
 							} else {
+								const beforeSaveHook = this.hooks.beforeSave
+								if (beforeSaveHook) {
+									if (this._tempBody) {
+										this._tempBody = beforeSaveHook(this, recipients, this._tempBody)
+									} else {
+										this._editor.setHTML(beforeSaveHook(this, recipients, this._editor.getHTML()))
+									}
+								}
 								return this.saveDraft(true, false)
 								           .return(recipients)
 							}
@@ -897,13 +914,15 @@ export class MailEditor {
 
 								return sendMail.then(ok => {
 									if (ok) {
+										const beforeSentHook = this.hooks.beforeSent
 										return this._updateContacts(resolvedRecipients)
-										           .then(() => worker.sendMailDraft(
-											           neverNull(this.draft),
-											           resolvedRecipients,
-											           this._selectedNotificationLanguage()))
+										           .then(() => beforeSentHook && beforeSentHook(this, downcast(this._attachments))
+											           || ({calendarFileMethods: []}))
+										           .then(({calendarFileMethods}) => worker.sendMailDraft(neverNull(this.draft), resolvedRecipients,
+											           this._selectedNotificationLanguage(), calendarFileMethods))
 										           .then(() => this._updatePreviousMail())
 										           .then(() => this._updateExternalLanguage())
+										           .then(() => this.hooks.afterSent && this.hooks.afterSent(this))
 										           .then(() => this._close())
 										           .catch(LockedError, e => Dialog.error("operationStillActive_msg"))
 									}
@@ -1271,97 +1290,6 @@ export class ContactSuggestion implements Suggestion {
 		])
 	}
 
-}
-
-class MailBubbleHandler implements BubbleHandler<RecipientInfo, ContactSuggestion> {
-	suggestionHeight: number;
-	_mailEditor: MailEditor;
-
-	constructor(mailEditor: MailEditor) {
-		this._mailEditor = mailEditor
-		this.suggestionHeight = ContactSuggestionHeight
-	}
-
-	getSuggestions(text: string): Promise<ContactSuggestion[]> {
-		let query = text.trim().toLowerCase()
-		if (isMailAddress(query, false)) {
-			return Promise.resolve([])
-		}
-
-		// ensure match word order for email addresses mainly
-		let contactsPromise = searchForContacts("\"" + query + "\"", "recipient", 10).catch(DbError, () => {
-			return LazyContactListId.getAsync().then(listId => loadAll(ContactTypeRef, listId))
-		})
-
-		return contactsPromise
-			.map(contact => {
-				let name = getContactListName(contact)
-				let mailAddresses = []
-				if (name.toLowerCase().indexOf(query) !== -1) {
-					mailAddresses = contact.mailAddresses.filter(ma => isMailAddress(ma.address.trim(), false))
-				} else {
-					mailAddresses = contact.mailAddresses.filter(ma => {
-						return isMailAddress(ma.address.trim(), false) && ma.address.toLowerCase().indexOf(query) !== -1
-					})
-				}
-				return mailAddresses.map(ma => new ContactSuggestion(name, ma.address.trim(), contact))
-			})
-			.reduce((a, b) => a.concat(b), [])
-			.then(suggestions => {
-				if (env.mode === Mode.App) {
-					return findRecipients(query, 10, suggestions).then(() => suggestions)
-				} else {
-					return suggestions
-				}
-			})
-			.then(suggestions => {
-				return suggestions.sort((suggestion1, suggestion2) =>
-					suggestion1.name.localeCompare(suggestion2.name))
-			})
-	}
-
-	createBubbleFromSuggestion(suggestion: ContactSuggestion): Bubble<RecipientInfo> {
-		return this._mailEditor.createBubble(suggestion.name, suggestion.mailAddress, suggestion.contact)
-	}
-
-	createBubblesFromText(text: string): Bubble<RecipientInfo>[] {
-		let separator = (text.indexOf(";") !== -1) ? ";" : ","
-		let textParts = text.split(separator)
-		let bubbles = []
-
-		for (let part of textParts) {
-			part = part.trim()
-			if (part.length !== 0) {
-				let bubble = this.getBubbleFromText(part)
-				if (!bubble) {
-					return [] // if one recipient is invalid, we do not return any valid ones because all invalid text would be deleted otherwise
-				} else {
-					bubbles.push(bubble)
-				}
-			}
-		}
-		return bubbles
-	}
-
-	bubbleDeleted(bubble: Bubble<RecipientInfo>): void {
-	}
-
-	/**
-	 * Retrieves a RecipientInfo instance from a text. The text may be a contact name, contact mail address or other mail address.
-	 * @param text The text to create a RecipientInfo from.
-	 * @return The recipient info or null if the text is not valid data.
-	 */
-	getBubbleFromText(text: string): ?Bubble<RecipientInfo> {
-		text = text.trim()
-		if (text === "") return null
-		const nameAndMailAddress = stringToNameAndMailAddress(text)
-		if (nameAndMailAddress) {
-			let name = (nameAndMailAddress.name) ? nameAndMailAddress.name : null // name will be resolved with contact
-			return this._mailEditor.createBubble(name, nameAndMailAddress.mailAddress, null)
-		} else {
-			return null
-		}
-	}
 }
 
 /**

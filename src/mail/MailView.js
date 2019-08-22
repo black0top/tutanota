@@ -164,8 +164,8 @@ export class MailView implements CurrentView {
 							Promise.join(
 								this._newMail(),
 								fileController.readLocalFiles(ev.dataTransfer.files),
-								(ed, dataFiles) => {
-									ed.attachFiles((dataFiles: any))
+								(editor, dataFiles) => {
+									editor.attachFiles((dataFiles: any))
 									m.redraw()
 								}).catch(PermissionError, noOp)
 						}

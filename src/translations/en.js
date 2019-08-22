@@ -1107,6 +1107,19 @@ module.exports = {
 		"yes_label": "Yes",
 		"yourCalendars_label": "Your calendars",
 		"yourFolders_action": "YOUR FOLDERS",
-		"yourMessage_label": "Your message"
+		"yourMessage_label": "Your message",
+		"organizer_label": "Organizer",
+		"attendees_label": "Attendees",
+		"invite_action": "Invite",
+		"maybe_label": "Maybe",
+		"sendEventUpdate_msg": "Send out event update?",
+		"eventInviteMail_msg": "You're invited to {event}",
+		"repliedToEventInvite_msg": "{sender} replied to calendar invitation",
+		"eventUpdated_msg": "Event updated {event}",
+		"eventCancelled_msg": "Event cancelled {event}",
+		"cannotOpenEvent_msg": "Couldn't open the event",
+		"viewOrAddEvent_action": "View/Add event",
+		"who_label": "Who",
+		"when_label": "When",
 	}
 }

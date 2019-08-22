@@ -1,6 +1,7 @@
 //@flow
 import type {CalendarMonthTimeRange} from "./CalendarUtils"
 import {
+	copyEvent,
 	getAllDayDateForTimezone,
 	getAllDayDateUTCFromZone,
 	getDiffInDays,
@@ -14,9 +15,9 @@ import {
 import {isToday} from "../api/common/utils/DateUtils"
 import {getFromMap} from "../api/common/utils/MapUtils"
 import type {DeferredObject} from "../api/common/utils/Utils"
-import {clone, defer, downcast} from "../api/common/utils/Utils"
+import {clone, defer, downcast, neverNull} from "../api/common/utils/Utils"
 import type {AlarmIntervalEnum, EndTypeEnum, RepeatPeriodEnum} from "../api/common/TutanotaConstants"
-import {AlarmInterval, EndType, FeatureType, OperationType, RepeatPeriod} from "../api/common/TutanotaConstants"
+import {AlarmInterval, EndType, FeatureType, GroupType, OperationType, RepeatPeriod} from "../api/common/TutanotaConstants"
 import {DateTime, FixedOffsetZone, IANAZone} from "luxon"
 import {isAllDayEvent, isAllDayEventByTimes} from "../api/common/utils/CommonCalendarUtils"
 import {Notifications} from "../gui/Notifications"
@@ -24,9 +25,11 @@ import type {EntityUpdateData} from "../api/main/EventController"
 import {EventController, isUpdateForTypeRef} from "../api/main/EventController"
 import {worker} from "../api/main/WorkerClient"
 import {locator} from "../api/main/MainLocator"
-import {getElementId} from "../api/common/EntityFunctions"
-import {load} from "../api/main/Entity"
+import {getElementId, HttpMethod, isSameId} from "../api/common/EntityFunctions"
+import {erase, load, loadAll, serviceRequestVoid} from "../api/main/Entity"
+import type {UserAlarmInfo} from "../api/entities/sys/UserAlarmInfo"
 import {UserAlarmInfoTypeRef} from "../api/entities/sys/UserAlarmInfo"
+import type {CalendarEvent} from "../api/entities/tutanota/CalendarEvent"
 import {CalendarEventTypeRef} from "../api/entities/tutanota/CalendarEvent"
 import {formatDateWithWeekdayAndTime, formatTime} from "../misc/Formatter"
 import {lang} from "../misc/LanguageViewModel"
@@ -36,8 +39,20 @@ import {NotFoundError} from "../api/common/error/RestError"
 import {client} from "../misc/ClientDetector"
 import {insertIntoSortedArray} from "../api/common/utils/ArrayUtils"
 import m from "mithril"
-import type {UserAlarmInfo} from "../api/entities/sys/UserAlarmInfo"
-import type {CalendarEvent} from "../api/entities/tutanota/CalendarEvent"
+import {UserTypeRef} from "../api/entities/sys/User"
+import {CalendarGroupRootTypeRef} from "../api/entities/tutanota/CalendarGroupRoot"
+import {GroupInfoTypeRef} from "../api/entities/sys/GroupInfo"
+import type {CalendarInfo} from "./CalendarView"
+import {mailModel} from "../mail/MailModel"
+import {FileTypeRef} from "../api/entities/tutanota/File"
+import {parseCalendarFile} from "./CalendarImporter"
+import {module as replaced} from "@hot"
+import type {CalendarEventUpdate} from "../api/entities/tutanota/CalendarEventUpdate"
+import {CalendarEventUpdateTypeRef} from "../api/entities/tutanota/CalendarEventUpdate"
+import {LazyLoaded} from "../api/common/utils/LazyLoaded"
+import {createMembershipRemoveData} from "../api/entities/sys/MembershipRemoveData"
+import {SysService} from "../api/entities/sys/Services"
+import {GroupTypeRef} from "../api/entities/sys/Group"
 
 
 function eventComparator(l: CalendarEvent, r: CalendarEvent): number {
@@ -269,6 +284,50 @@ function getValidTimeZone(zone: string, fallback: ?string): string {
 	}
 }
 
+export function loadCalendarInfos(): Promise<Map<Id, CalendarInfo>> {
+	const userId = logins.getUserController().user._id
+	return load(UserTypeRef, userId)
+		.then(user => {
+			const calendarMemberships = user.memberships.filter(m => m.groupType === GroupType.Calendar);
+			const notFoundMemberships = []
+			return Promise
+				.map(calendarMemberships, (membership) => Promise
+					.all([
+						load(CalendarGroupRootTypeRef, membership.group),
+						load(GroupInfoTypeRef, membership.groupInfo),
+						load(GroupTypeRef, membership.group)
+					])
+					.catch(NotFoundError, () => {
+						notFoundMemberships.push(membership)
+						return null
+					})
+				)
+				.then((groupInstances) => {
+					const calendarInfos: Map<Id, CalendarInfo> = new Map()
+					groupInstances.filter(Boolean)
+					              .forEach(([groupRoot, groupInfo, group]) => {
+						              calendarInfos.set(groupRoot._id, {
+							              groupRoot,
+							              groupInfo,
+							              shortEvents: [],
+							              longEvents: new LazyLoaded(() => loadAll(CalendarEventTypeRef, groupRoot.longEvents), []),
+							              group: group,
+							              shared: !isSameId(group.user, userId)
+						              })
+					              })
+
+					// cleanup inconsistent memberships
+					Promise.each(notFoundMemberships, (notFoundMembership) => {
+						const data = createMembershipRemoveData({user: userId, group: notFoundMembership.group})
+						return serviceRequestVoid(SysService.MembershipService, HttpMethod.DELETE, data)
+					})
+					return calendarInfos
+				})
+		})
+		.tap(() => m.redraw())
+}
+
+
 class CalendarModel {
 	_notifications: Notifications;
 	_scheduledNotifications: Map<string, TimeoutID>;
@@ -286,6 +345,54 @@ class CalendarModel {
 				this._entityEventsReceived(updates)
 			})
 		}
+	}
+
+	_processCalendarReplies() {
+		return mailModel.getUserMailboxDetails().then((mailboxDetails) => {
+			loadAll(CalendarEventUpdateTypeRef, neverNull(mailboxDetails.mailboxGroupRoot.calendarEventUpdates).list)
+				.then((invites) => {
+					return Promise.each(invites, (invite) => {
+						return this._processCalendarReply(invite)
+					})
+				})
+		})
+	}
+
+	_processCalendarReply(update: CalendarEventUpdate) {
+		return load(FileTypeRef, update.file)
+			.then((file) => worker.downloadFileContent(file))
+			.then((dataFile: DataFile) => parseCalendarFile(dataFile))
+			.then((parsedCalendarData) => {
+				if (parsedCalendarData.method === "REPLY") {
+					// Process it
+					if (parsedCalendarData.contents.length > 0) {
+						const replyEvent = parsedCalendarData.contents[0].event
+						return worker.getEventByUid(neverNull(replyEvent.uid)).then((dbEvent) => {
+							const replyAttendee = replyEvent.attendees[0]
+							if (dbEvent && replyAttendee) {
+								const dbAttendee = dbEvent.attendees.find((a) =>
+									replyAttendee.address.address === a.address.address)
+								if (dbAttendee) {
+									dbAttendee.status = replyAttendee.status
+									const updatedEvent = copyEvent(dbEvent, {})
+									console.log("updating event with reply status", updatedEvent.uid, updatedEvent._id)
+									return worker.createCalendarEvent(updatedEvent, [], dbEvent)
+								} else {
+									console.log("Attendee was not found", dbEvent._id, replyAttendee)
+								}
+							} else {
+								console.log("event was not found", replyEvent.uid)
+							}
+						})
+					}
+				}
+			})
+			.then(() => erase(update))
+	}
+
+	init(): Promise<void> {
+		return this.scheduleAlarmsLocally()
+		           .then(() => this._processCalendarReplies())
 	}
 
 	scheduleAlarmsLocally(): Promise<void> {
@@ -387,6 +494,14 @@ class CalendarModel {
 			} else if (isUpdateForTypeRef(CalendarEventTypeRef, entityEventData)
 				&& (entityEventData.operation === OperationType.CREATE || entityEventData.operation === OperationType.UPDATE)) {
 				getFromMap(this._pendingAlarmRequests, entityEventData.instanceId, defer).resolve()
+			} else if (isUpdateForTypeRef(CalendarEventUpdateTypeRef, entityEventData)
+				&& entityEventData.operation === OperationType.CREATE) {
+				console.log("create for invite", entityEventData)
+				load(CalendarEventUpdateTypeRef, [entityEventData.instanceListId, entityEventData.instanceId])
+					.then((invite) => this._processCalendarReply(invite))
+					.catch(NotFoundError, (e) => {
+						console.log("invite not found", [entityEventData.instanceListId, entityEventData.instanceId], e)
+					})
 			}
 		}
 	}
@@ -397,3 +512,7 @@ class CalendarModel {
 }
 
 export const calendarModel = new CalendarModel(new Notifications(), locator.eventController)
+
+if (replaced) {
+	Object.assign(calendarModel, replaced.calendarModel)
+}

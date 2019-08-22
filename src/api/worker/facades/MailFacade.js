@@ -4,7 +4,7 @@ import {aes128RandomKey} from "../crypto/Aes"
 import {load, loadRoot, serviceRequest, serviceRequestVoid} from "../EntityWorker"
 import {TutanotaService} from "../../entities/tutanota/Services"
 import type {LoginFacade} from "./LoginFacade"
-import type {ConversationTypeEnum, ReportedMailFieldTypeEnum} from "../../common/TutanotaConstants"
+import type {CalendarMethodEnum, ConversationTypeEnum, ReportedMailFieldTypeEnum} from "../../common/TutanotaConstants"
 import {GroupType, MailAuthenticationStatus as MailAuthStatus, OperationType, ReportedMailFieldType} from "../../common/TutanotaConstants"
 import {createCreateMailFolderData} from "../../entities/tutanota/CreateMailFolderData"
 import {createDraftCreateData} from "../../entities/tutanota/DraftCreateData"
@@ -52,6 +52,7 @@ import type {DraftAttachment} from "../../entities/tutanota/DraftAttachment"
 import type {SendDraftData} from "../../entities/tutanota/SendDraftData"
 import type {EntityUpdate} from "../../entities/sys/EntityUpdate"
 import type {User} from "../../entities/sys/User"
+import {createCalendarFileMethod} from "../../entities/tutanota/CalendarFileMethod"
 
 assertWorkerOrNode()
 
@@ -259,7 +260,7 @@ export class MailFacade {
 		return attachment
 	}
 
-	sendDraft(draft: Mail, recipientInfos: RecipientInfo[], language: string): Promise<void> {
+	sendDraft(draft: Mail, recipientInfos: RecipientInfo[], language: string, calendarMethods: Array<[IdTuple, CalendarMethodEnum]>): Promise<void> {
 		return getMailGroupIdForMailAddress(this._login.getLoggedInUser(), draft.sender.address)
 			.then(senderMailGroupId => {
 				let bucketKey = aes128RandomKey()
@@ -267,6 +268,7 @@ export class MailFacade {
 				let service = createSendDraftData()
 				service.language = language
 				service.mail = draft._id
+				service.calendarMethods = calendarMethods.map(([file, method]) => createCalendarFileMethod({file, method}))
 
 				return Promise.each(draft.attachments, fileId => {
 					return load(FileTypeRef, fileId).then(file => {

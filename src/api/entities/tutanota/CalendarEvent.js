@@ -2,6 +2,7 @@
 
 import {create, TypeRef} from "../../common/EntityFunctions"
 
+import type {CalendarEventAttendee} from "./CalendarEventAttendee"
 import type {CalendarRepeatRule} from "./CalendarRepeatRule"
 
 export const CalendarEventTypeRef: TypeRef<CalendarEvent> = new TypeRef("tutanota", "CalendarEvent")
@@ -77,11 +78,38 @@ export const _TypeModel: TypeModel = {
 			"final": false,
 			"encrypted": true
 		},
+		"hashedUid": {
+			"name": "hashedUid",
+			"id": 1088,
+			"since": 42,
+			"type": "Bytes",
+			"cardinality": "ZeroOrOne",
+			"final": false,
+			"encrypted": false
+		},
 		"location": {
 			"name": "location",
 			"id": 944,
 			"since": 33,
 			"type": "String",
+			"cardinality": "One",
+			"final": false,
+			"encrypted": true
+		},
+		"organizer": {
+			"name": "organizer",
+			"id": 1089,
+			"since": 42,
+			"type": "String",
+			"cardinality": "ZeroOrOne",
+			"final": true,
+			"encrypted": true
+		},
+		"sequence": {
+			"name": "sequence",
+			"id": 1090,
+			"since": 42,
+			"type": "Number",
 			"cardinality": "One",
 			"final": false,
 			"encrypted": true
@@ -115,6 +143,15 @@ export const _TypeModel: TypeModel = {
 		}
 	},
 	"associations": {
+		"attendees": {
+			"name": "attendees",
+			"id": 1091,
+			"since": 42,
+			"type": "AGGREGATION",
+			"cardinality": "Any",
+			"refType": "CalendarEventAttendee",
+			"final": false
+		},
 		"repeatRule": {
 			"name": "repeatRule",
 			"id": 945,
@@ -136,7 +173,7 @@ export const _TypeModel: TypeModel = {
 		}
 	},
 	"app": "tutanota",
-	"version": "41"
+	"version": "42"
 }
 
 export function createCalendarEvent(values?: $Shape<$Exact<CalendarEvent>>): CalendarEvent {
@@ -154,11 +191,15 @@ export type CalendarEvent = {
 	_permissions: Id;
 	description: string;
 	endTime: Date;
+	hashedUid: ?Uint8Array;
 	location: string;
+	organizer: ?string;
+	sequence: NumberString;
 	startTime: Date;
 	summary: string;
 	uid: ?string;
 
+	attendees: CalendarEventAttendee[];
 	repeatRule: ?CalendarRepeatRule;
 	alarmInfos: IdTuple[];
 }

@@ -1,4 +1,5 @@
 //@flow
+import {px, size} from "../gui/size"
 import {incrementDate} from "../api/common/utils/DateUtils"
 import stream from "mithril/stream/stream.js"
 import {DatePicker} from "../gui/base/DatePicker"
@@ -12,23 +13,35 @@ import {lang} from "../misc/LanguageViewModel"
 import type {DropDownSelectorAttrs} from "../gui/base/DropDownSelectorN"
 import {DropDownSelectorN} from "../gui/base/DropDownSelectorN"
 import {Icons} from "../gui/base/icons/Icons"
+import type {CalendarEvent} from "../api/entities/tutanota/CalendarEvent"
 import {createCalendarEvent} from "../api/entities/tutanota/CalendarEvent"
 import {erase, load} from "../api/main/Entity"
 
 import {downcast, neverNull, noOp} from "../api/common/utils/Utils"
 import {ButtonN, ButtonType} from "../gui/base/ButtonN"
 import type {AlarmIntervalEnum, EndTypeEnum, RepeatPeriodEnum} from "../api/common/TutanotaConstants"
-import {AlarmInterval, EndType, RepeatPeriod, ShareCapability, TimeFormat} from "../api/common/TutanotaConstants"
+import {
+	AlarmInterval,
+	CalendarAttendeeStatus,
+	EndType,
+	getAttendeeStatus,
+	RepeatPeriod,
+	ShareCapability,
+	TimeFormat
+} from "../api/common/TutanotaConstants"
 import {last, lastThrow, numberRange, remove} from "../api/common/utils/ArrayUtils"
 import {incrementByRepeatPeriod} from "./CalendarModel"
 import {DateTime} from "luxon"
+import type {AlarmInfo} from "../api/entities/sys/AlarmInfo"
 import {createAlarmInfo} from "../api/entities/sys/AlarmInfo"
 import {isSameId, listIdPart} from "../api/common/EntityFunctions"
 import {logins} from "../api/main/LoginController"
 import {UserAlarmInfoTypeRef} from "../api/entities/sys/UserAlarmInfo"
 import {
-	createEventId,
+	calendarAttendeeStatusDescription,
+	assignEventId,
 	createRepeatRuleWithValues,
+	filterInt,
 	generateUid,
 	getAllDayDateForTimezone,
 	getAllDayDateUTCFromZone,
@@ -50,10 +63,15 @@ import {worker} from "../api/main/WorkerClient"
 import {NotFoundError} from "../api/common/error/RestError"
 import {TimePicker} from "../gui/base/TimePicker"
 import {windowFacade} from "../misc/WindowFacade"
+import {ExpanderButtonN, ExpanderPanelN} from "../gui/base/ExpanderN"
+import {getDefaultSenderFromUser, getEnabledMailAddresses} from "../mail/MailUtils"
+import type {MailboxDetail} from "../mail/MailModel"
+import {createCalendarEventAttendee} from "../api/entities/tutanota/CalendarEventAttendee"
+import {getCleanedMailAddress} from "../misc/Formatter"
+import {createMailAddress} from "../api/entities/tutanota/MailAddress"
+import {sendCalendarCancellation, sendCalendarInvite, sendCalendarInviteResponse, sendCalendarUpdate} from "./CalendarInvites"
 import {client} from "../misc/ClientDetector"
 import type {CalendarRepeatRule} from "../api/entities/tutanota/CalendarRepeatRule"
-import type {CalendarEvent} from "../api/entities/tutanota/CalendarEvent"
-import type {AlarmInfo} from "../api/entities/sys/AlarmInfo"
 
 const TIMESTAMP_ZERO_YEAR = 1970
 
@@ -74,7 +92,8 @@ function _repeatRulesEqual(repeatRule: ?CalendarRepeatRule, repeatRule2: ?Calend
 }
 
 // interpret it as full day in Europe/Berlin, not in the UTC.
-export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarInfo>, existingEvent ?: CalendarEvent) {
+export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarInfo>, mailboxDetail: MailboxDetail,
+                                        existingEvent?: CalendarEvent) {
 	const summary = stream("")
 	let calendarArray = Array.from(calendars.values())
 	let readOnly = false
@@ -272,6 +291,46 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 
 	let windowCloseUnsubscribe
 
+	const attendeesExpanded = stream(false)
+
+	const mailAddresses = getEnabledMailAddresses(mailboxDetail)
+	const attendees = existingEvent && existingEvent.attendees.slice() || []
+	const organizer = stream(existingEvent && existingEvent.organizer || getDefaultSenderFromUser())
+	const isOwnEvent = mailAddresses.includes(organizer())
+	const inviteFieldValue = stream("")
+
+	const participationStatus = stream()
+	let ownAttendee
+	if (existingEvent && !isOwnEvent) {
+		ownAttendee = attendees.find(a => mailAddresses.includes(a.address.address))
+		participationStatus(ownAttendee ? getAttendeeStatus(ownAttendee) : CalendarAttendeeStatus.NEEDS_ACTION)
+	} else {
+		ownAttendee = null
+	}
+
+
+	function addAttendee() {
+		const address = getCleanedMailAddress(inviteFieldValue())
+		if (address) {
+			attendees.push(createCalendarEventAttendee({
+				address: createMailAddress({address,}),
+				status: CalendarAttendeeStatus.NEEDS_ACTION,
+			}))
+			inviteFieldValue("")
+		}
+	}
+
+	const participationDropdownAttrs = {
+		label: () => "Your decision",
+		items: [
+			{name: lang.get("noSelection_msg"), value: CalendarAttendeeStatus.NEEDS_ACTION, selectable: false},
+			{name: lang.get("yes_label"), value: CalendarAttendeeStatus.ACCEPTED},
+			{name: lang.get("maybe_label"), value: CalendarAttendeeStatus.TENTATIVE},
+			{name: lang.get("no_label"), value: CalendarAttendeeStatus.DECLINED},
+		],
+		selectedValue: participationStatus,
+	}
+
 	const okAction = (dialog) => {
 		const newEvent = createCalendarEvent()
 		if (!startDatePicker.date() || !endDatePicker.date()) {
@@ -351,28 +410,72 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 				newAlarms.push(newAlarm)
 			}
 		}
-
-
-		if (existingEvent == null
-			|| existingEvent._ownerGroup !== newEvent._ownerGroup // event has been moved to another calendar
-			|| newEvent.startTime.getTime() !== existingEvent.startTime.getTime()
-			|| !_repeatRulesEqual(newEvent.repeatRule, existingEvent.repeatRule)) {
-			// if values of the existing events have changed that influence the alarm time then delete the old event and create a new one.
-			createEventId(newEvent, zone, groupRoot)
-			worker.createCalendarEvent(newEvent, newAlarms, existingEvent)
+		newEvent.attendees = attendees
+		if (existingEvent) {
+			newEvent.sequence = String(filterInt(existingEvent.sequence) + 1)
+		}
+		let newAttendees = []
+		let existingAttendees = []
+		if (isOwnEvent) {
+			if (existingEvent) {
+				attendees.forEach((a) => {
+					if (existingEvent.attendees.includes(a)) {
+						existingAttendees.push(a)
+					} else {
+						newAttendees.push(a)
+					}
+				})
+			} else {
+				newAttendees = attendees
+			}
 		} else {
-			worker.updateCalendarEvent(newEvent, newAlarms, existingEvent)
+			if (ownAttendee && participationStatus() !== CalendarAttendeeStatus.NEEDS_ACTION
+				&& ownAttendee.status !== participationStatus()) {
+				ownAttendee.status = participationStatus()
+
+				newEvent.attendees = attendees
+				sendCalendarInviteResponse(newEvent, createMailAddress({
+					name: ownAttendee.address.name,
+					address: ownAttendee.address.address,
+				}), participationStatus())
+			}
 		}
 
-
-		dialog.close()
+		;(existingAttendees.length ? Dialog.confirm("sendEventUpdate_msg") : Promise.resolve(false)).then((shouldSendOutUpdates) => {
+			let updatePromise
+			if (existingEvent == null
+				|| existingEvent._ownerGroup !== newEvent._ownerGroup // event has been moved to another calendar
+				|| newEvent.startTime.getTime() !== existingEvent.startTime.getTime()
+				|| !_repeatRulesEqual(newEvent.repeatRule, existingEvent.repeatRule)) {
+				// if values of the existing events have changed that influence the alarm time then delete the old event and create a new one.
+				assignEventId(newEvent, zone, groupRoot)
+				updatePromise = worker.createCalendarEvent(newEvent, newAlarms, existingEvent)
+			} else {
+				updatePromise = worker.updateCalendarEvent(newEvent, newAlarms, existingEvent)
+			}
+			dialog.close()
+			return updatePromise.then(() => {
+				if (newAttendees.length) {
+					sendCalendarInvite(newEvent, newAlarms, newAttendees.map(a => a.address))
+				}
+				if (shouldSendOutUpdates) {
+					sendCalendarUpdate(newEvent, existingAttendees.map(a => a.address))
+				}
+				if (existingEvent) {
+					const removedAttendees = existingEvent.attendees.filter(att => !attendees.includes(att))
+					if (removedAttendees.length > 0) {
+						sendCalendarCancellation(existingEvent, removedAttendees.map(a => a.address))
+					}
+				}
+			})
+		})
 	}
 
 	const dialog = Dialog.createActionDialog({
 		title: () => lang.get("createEvent_label"),
 		child: () => m("", {
-			oncreate: vnode => windowCloseUnsubscribe = windowFacade.addWindowCloseListener(() => {}),
-			onremove: vnode => windowCloseUnsubscribe()
+			oncreate: () => windowCloseUnsubscribe = windowFacade.addWindowCloseListener(() => {}),
+			onremove: () => windowCloseUnsubscribe()
 		}, [
 			m(TextFieldN, {
 				label: "title_placeholder",
@@ -455,7 +558,65 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 				type: Type.Area,
 				disabled: readOnly
 			}),
-			existingEvent && !readOnly ? m(".mr-negative-s.float-right.flex-end-on-child", m(ButtonN, {
+			isOwnEvent
+				? m(DropDownSelectorN, {
+					label: "organizer_label",
+					items: mailAddresses
+						.map(mailAddress => ({
+							name: mailAddress,
+							value: mailAddress
+						})),
+					selectedValue: organizer,
+				})
+				: m(".col.mt", [
+					m(".small", lang.get("organizer_label")),
+					m("", organizer())
+				]),
+			[
+				m(ExpanderButtonN, {
+					label: "attendees_label",
+					expanded: attendeesExpanded,
+				}),
+				m(ExpanderPanelN, {
+					expanded: attendeesExpanded,
+				}, [
+					m(TextFieldN, {
+						class: "mt-negative-s",
+						label: "invite_action",
+						value: inviteFieldValue,
+						keyHandler: (keyPress) => {
+							if (keyPress.keyCode === 13) {
+								addAttendee()
+								return false
+							}
+							return true
+						}
+					}),
+					attendees.map(a => m(".flex", [
+						m(".flex-grow", {
+								style: {
+									height: px(size.button_height),
+									"lineHeight": px(size.button_height),
+								},
+							},
+							`${a.address.name || ""} ${a.address.address} ${calendarAttendeeStatusDescription(getAttendeeStatus(a))}`),
+						isOwnEvent
+							? m(ButtonN, {
+								label: "delete_action",
+								type: ButtonType.Action,
+								icon: () => Icons.Cancel,
+								click: () => {
+									remove(attendees, a)
+								}
+							})
+							: null
+					]))
+				]),
+			],
+			!isOwnEvent
+				? m(DropDownSelectorN, participationDropdownAttrs)
+				: null,
+			existingEvent && existingEvent._id && !readOnly ? m(".mr-negative-s.float-right.flex-end-on-child", m(ButtonN, {
 				label: "delete_action",
 				type: ButtonType.Primary,
 				click: () => {
@@ -464,6 +625,9 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 						: Promise.resolve(true)
 					p.then((answer) => {
 						if (answer) {
+							if (isOwnEvent && existingEvent.attendees.length) {
+								sendCalendarCancellation(existingEvent, existingEvent.attendees.map(a => a.address))
+							}
 							erase(existingEvent).catch(NotFoundError, noOp)
 							dialog.close()
 						}

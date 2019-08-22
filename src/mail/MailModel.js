@@ -11,15 +11,20 @@ import {Dialog} from "../gui/base/Dialog"
 import {logins} from "../api/main/LoginController"
 import {getTrashFolder, isFinalDelete} from "./MailUtils"
 import {createDeleteMailData} from "../api/entities/tutanota/DeleteMailData"
+import type {MailBox} from "../api/entities/tutanota/MailBox"
 import {MailBoxTypeRef} from "../api/entities/tutanota/MailBox"
 import {MailboxGroupRootTypeRef} from "../api/entities/tutanota/MailboxGroupRoot"
+import type {GroupInfo} from "../api/entities/sys/GroupInfo"
 import {GroupInfoTypeRef} from "../api/entities/sys/GroupInfo"
+import type {Group} from "../api/entities/sys/Group"
 import {GroupTypeRef} from "../api/entities/sys/Group"
+import type {MailFolder} from "../api/entities/tutanota/MailFolder"
 import {MailFolderTypeRef} from "../api/entities/tutanota/MailFolder"
 import {FeatureType, GroupType, MailFolderType, OperationType} from "../api/common/TutanotaConstants"
 import {module as replaced} from "@hot"
 import {UserTypeRef} from "../api/entities/sys/User"
 import {locator} from "../api/main/MainLocator"
+import type {Mail} from "../api/entities/tutanota/Mail"
 import {MailTypeRef} from "../api/entities/tutanota/Mail"
 import type {EntityUpdateData} from "../api/main/EventController"
 import {EventController, isUpdateForTypeRef} from "../api/main/EventController"
@@ -29,18 +34,15 @@ import {ProgrammingError} from "../api/common/error/ProgrammingError"
 import {findAndApplyMatchingRule} from "./InboxRuleHandler"
 import {getFromMap} from "../api/common/utils/MapUtils"
 import {worker} from "../api/main/WorkerClient"
-import type {Mail} from "../api/entities/tutanota/Mail"
 import type {WebsocketCounterData} from "../api/entities/sys/WebsocketCounterData"
-import type {MailBox} from "../api/entities/tutanota/MailBox"
-import type {MailFolder} from "../api/entities/tutanota/MailFolder"
-import type {GroupInfo} from "../api/entities/sys/GroupInfo"
-import type {Group} from "../api/entities/sys/Group"
+import type {MailboxGroupRoot} from "../api/entities/tutanota/MailboxGroupRoot"
 
 export type MailboxDetail = {
 	mailbox: MailBox,
 	folders: MailFolder[],
 	mailGroupInfo: GroupInfo,
-	mailGroup: Group
+	mailGroup: Group,
+	mailboxGroupRoot: MailboxGroupRoot,
 }
 
 export type MailboxCounters = {
@@ -82,22 +84,26 @@ export class MailModel {
 	_init(): Promise<void> {
 		let mailGroupMemberships = logins.getUserController().getMailGroupMemberships()
 		this._initialization = Promise.all(mailGroupMemberships.map(mailGroupMembership => {
-			return Promise.all([
-				load(MailboxGroupRootTypeRef, mailGroupMembership.group)
-					.then(mailGroupRoot => load(MailBoxTypeRef, mailGroupRoot.mailbox)),
-				load(GroupInfoTypeRef, mailGroupMembership.groupInfo),
-				load(GroupTypeRef, mailGroupMembership.group)
-			]).spread((mailbox, mailGroupInfo, mailGroup) => {
-				return this._loadFolders(neverNull(mailbox.systemFolders).folders, true).then(folders => {
-					return {
-						mailbox,
-						folders,
-						mailGroupInfo,
-						mailGroup
-					}
+				return Promise.all([
+					load(MailboxGroupRootTypeRef, mailGroupMembership.group),
+					load(GroupInfoTypeRef, mailGroupMembership.groupInfo),
+					load(GroupTypeRef, mailGroupMembership.group)
+				]).spread((mailboxGroupRoot, mailGroupInfo, mailGroup) => {
+					return load(MailBoxTypeRef, mailboxGroupRoot.mailbox).then((mailbox) => {
+						return this._loadFolders(neverNull(mailbox.systemFolders).folders, true)
+						           .then((folders) => {
+							           return {
+								           mailbox,
+								           folders,
+								           mailGroupInfo,
+								           mailGroup,
+								           mailboxGroupRoot
+							           }
+						           })
+					})
 				})
 			})
-		})).then(details => {
+		).then(details => {
 			this.mailboxDetails(details)
 		}).return()
 		return this._initialization

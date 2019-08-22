@@ -5,8 +5,15 @@ import stream from "mithril/stream/stream.js"
 import {ExpanderButton, ExpanderPanel} from "../gui/base/Expander"
 import {ExpanderButtonN, ExpanderPanelN} from "../gui/base/ExpanderN"
 import {load, serviceRequestVoid, update} from "../api/main/Entity"
-import {Button, createAsyncDropDownButton, createDropDownButton} from "../gui/base/Button"
-import {formatDateTime, formatDateWithWeekday, formatStorageSize, formatTime, urlEncodeHtmlTags} from "../misc/Formatter"
+import {Button,  createAsyncDropDownButton, createDropDownButton} from "../gui/base/Button"
+import {
+	formatDateTime,
+	formatDateWithWeekday,
+	formatStorageSize,
+	formatTime,
+
+	urlEncodeHtmlTags
+} from "../misc/Formatter"
 import {windowFacade} from "../misc/WindowFacade"
 import {ease} from "../gui/animation/Easing"
 import type {DomMutation} from "../gui/animation/Animations"
@@ -100,6 +107,8 @@ import type {ButtonAttrs, ButtonColorEnum} from "../gui/base/ButtonN"
 import {ButtonColors, ButtonN, ButtonType} from "../gui/base/ButtonN"
 import {styles} from "../gui/styles"
 import {worker} from "../api/main/WorkerClient"
+import {CALENDAR_MIME_TYPE} from "../calendar/CalendarUtils"
+import {showEventDetailsFromFile} from "../calendar/CalendarInvites"
 import {createAsyncDropdown, createDropdown} from "../gui/base/DropdownN"
 import {navButtonRoutes} from "../misc/RouteChange"
 import {createEmailSenderListElement} from "../api/entities/sys/EmailSenderListElement"
@@ -228,6 +237,7 @@ export class MailViewer {
 		this.view = () => {
 			const dateTime = formatDateWithWeekday(this.mail.receivedDate) + " • " + formatTime(this.mail.receivedDate)
 			expanderStyle.paddingTop = styles.isUsingBottomNavigation() ? "0" : "16px"
+			const firstCalendarFile = this._attachments.find(a => a.mimeType && a.mimeType.startsWith(CALENDAR_MIME_TYPE))
 			return [
 				m("#mail-viewer.fill-absolute"
 					+ (client.isMobileDevice() ? ".scroll-no-overlay.overflow-x-hidden" : ".flex.flex-column"), {
@@ -305,6 +315,17 @@ export class MailViewer {
 									: null,
 							this._renderAttachments(),
 							m("hr.hr.mb.mt-s"),
+							firstCalendarFile
+								? m(".flex.flex-end", [
+									m(ButtonN, {
+										label: "viewOrAddEvent_action",
+										type: ButtonType.Secondary,
+										click: () => {
+											showEventDetailsFromFile(firstCalendarFile)
+										}
+									}),
+								])
+								: null,
 						]),
 
 						m(".rel.margin-are-inset-lr.scroll-x.plr-l.pb-floating"

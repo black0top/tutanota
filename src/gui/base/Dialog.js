@@ -590,7 +590,8 @@ export class Dialog {
 	 * @param dropdownWidth width of the dropdown
 	 * @returns A promise resolving to the selected item. The returned promise is only resolved if "ok" is clicked.
 	 */
-	static showDropDownSelectionDialog<T>(titleId: TranslationKey, label: TranslationKey, infoMsgId: ?TranslationKey, items: {name: string, value: T}[], selectedValue: Stream<T>, dropdownWidth: ?number): Promise<T> {
+	static showDropDownSelectionDialog<T>(titleId: TranslationKey, label: TranslationKey, infoMsgId: ?TranslationKey,
+	                                      items: {name: string, value: T}[], selectedValue: Stream<T>, dropdownWidth: ?number): Promise<T> {
 		return new Promise(resolve => {
 			Dialog.showActionDialog({
 				title: lang.get(titleId),

@@ -12,13 +12,13 @@ import {keyManager} from "../misc/KeyManager"
 import {Icons} from "../gui/base/icons/Icons"
 import {theme} from "../gui/theme"
 import {DAY_IN_MILLIS, getHourOfDay, getStartOfDay, isSameDay} from "../api/common/utils/DateUtils"
+import type {CalendarEvent} from "../api/entities/tutanota/CalendarEvent"
 import {CalendarEventTypeRef} from "../api/entities/tutanota/CalendarEvent"
-import {CalendarGroupRootTypeRef} from "../api/entities/tutanota/CalendarGroupRoot"
 import {logins} from "../api/main/LoginController"
 import {_loadReverseRangeBetween, getListId, HttpMethod, isSameId, listIdPart} from "../api/common/EntityFunctions"
 import type {EntityUpdateData} from "../api/main/EventController"
 import {isUpdateForTypeRef} from "../api/main/EventController"
-import {defaultCalendarColor, GroupType, Keys, OperationType, reverse, ShareCapability, TimeFormat} from "../api/common/TutanotaConstants"
+import {defaultCalendarColor, Keys, OperationType, reverse, ShareCapability, TimeFormat} from "../api/common/TutanotaConstants"
 import {locator} from "../api/main/MainLocator"
 import {downcast, freezeMap, memoized, neverNull, noOp} from "../api/common/utils/Utils"
 import type {CalendarMonthTimeRange} from "./CalendarUtils"
@@ -38,7 +38,7 @@ import {showCalendarEventDialog} from "./CalendarEventDialog"
 import {worker} from "../api/main/WorkerClient"
 import type {ButtonAttrs} from "../gui/base/ButtonN"
 import {ButtonColors, ButtonN, ButtonType} from "../gui/base/ButtonN"
-import {addDaysForEvent, addDaysForLongEvent, addDaysForRecurringEvent} from "./CalendarModel"
+import {addDaysForEvent, addDaysForLongEvent, addDaysForRecurringEvent, loadCalendarInfos} from "./CalendarModel"
 import {findAllAndRemove, findAndRemove} from "../api/common/utils/ArrayUtils"
 import {formatDateWithWeekday, formatMonthWithFullYear} from "../misc/Formatter"
 import {NavButtonN} from "../gui/base/NavButtonN"
@@ -50,8 +50,8 @@ import {DateTime} from "luxon"
 import {NotFoundError} from "../api/common/error/RestError"
 import {showProgressDialog} from "../gui/base/ProgressDialog"
 import {CalendarAgendaView} from "./CalendarAgendaView"
-import {GroupInfoTypeRef} from "../api/entities/sys/GroupInfo"
 import {showEditCalendarDialog} from "./EditCalendarDialog"
+import type {GroupSettings} from "../api/entities/tutanota/GroupSettings"
 import {createGroupSettings} from "../api/entities/tutanota/GroupSettings"
 import {showNotAvailableForFreeDialog} from "../misc/ErrorHandlerImpl"
 import {attachDropdown} from "../gui/base/DropdownN"
@@ -63,8 +63,10 @@ import {exportCalendar, showCalendarImportDialog} from "./CalendarImporter"
 import {Dialog} from "../gui/base/Dialog"
 import {isApp} from "../api/Env"
 import {showCalendarSharingDialog} from "./CalendarSharingDialog"
+import type {ReceivedGroupInvitation} from "../api/entities/sys/ReceivedGroupInvitation"
 import {ReceivedGroupInvitationTypeRef} from "../api/entities/sys/ReceivedGroupInvitation"
-import {GroupTypeRef} from "../api/entities/sys/Group"
+import type {Group} from "../api/entities/sys/Group"
+import type {UserSettingsGroupRoot} from "../api/entities/tutanota/UserSettingsGroupRoot"
 import {UserSettingsGroupRootTypeRef} from "../api/entities/tutanota/UserSettingsGroupRoot"
 import {getDisplayText} from "../mail/MailUtils"
 import {UserGroupRootTypeRef} from "../api/entities/sys/UserGroupRoot"
@@ -73,17 +75,13 @@ import {loadGroupMembers} from "./CalendarSharingUtils"
 import {size} from "../gui/size"
 import {FolderColumnView} from "../gui/base/FolderColumnView"
 import {deviceConfig} from "../misc/DeviceConfig"
-import {SysService} from "../api/entities/sys/Services"
-import {createMembershipRemoveData} from "../api/entities/sys/MembershipRemoveData"
 import {premiumSubscriptionActive} from "../subscription/PriceUtils"
 import {LazyLoaded} from "../api/common/utils/LazyLoaded"
-import type {ReceivedGroupInvitation} from "../api/entities/sys/ReceivedGroupInvitation"
-import type {GroupSettings} from "../api/entities/tutanota/GroupSettings"
-import type {UserSettingsGroupRoot} from "../api/entities/tutanota/UserSettingsGroupRoot"
 import type {CalendarGroupRoot} from "../api/entities/tutanota/CalendarGroupRoot"
-import type {CalendarEvent} from "../api/entities/tutanota/CalendarEvent"
 import type {GroupInfo} from "../api/entities/sys/GroupInfo"
-import type {Group} from "../api/entities/sys/Group"
+import {GroupInfoTypeRef} from "../api/entities/sys/GroupInfo"
+import {all as promiseAll} from "../api/common/utils/PromiseUtils"
+import {mailModel} from "../mail/MailModel"
 
 export const LIMIT_PAST_EVENTS_YEARS = 100
 export const DEFAULT_HOUR_OF_DAY = 6
@@ -255,12 +253,10 @@ export class CalendarView implements CurrentView {
 		})
 
 		this.viewSlider = new ViewSlider([this.sidebarColumn, this.contentColumn], "CalendarView")
-
-
 		// load all calendars. if there is no calendar yet, create one
-		this._calendarInfos = this._loadCalendarInfos().then(calendarInfos => {
+		this._calendarInfos = loadCalendarInfos().then(calendarInfos => {
 			if (calendarInfos.size === 0) {
-				return worker.addCalendar("").then(() => this._loadCalendarInfos())
+				return worker.addCalendar("").then(() => loadCalendarInfos())
 			} else {
 				return calendarInfos
 			}
@@ -642,17 +638,18 @@ export class CalendarView implements CurrentView {
 	}
 
 	_onEventSelected(event: CalendarEvent) {
-		this._calendarInfos.then((calendarInfos) => {
-			let p = Promise.resolve(event)
-			if (event.repeatRule) {
-				// in case of a repeat rule we want to show the start event for now to indicate that we edit all events.
-				p = load(CalendarEventTypeRef, event._id)
-			}
-			p.then(e => showCalendarEventDialog(getEventStart(e, getTimeZone()), calendarInfos, e))
-			 .catch(NotFoundError, () => {
-				 console.log("calendar event not found when clicking on the event")
-			 })
-		})
+		promiseAll([this._calendarInfos, mailModel.getUserMailboxDetails()])
+			.then(([calendarInfos, mailboxDetails]) => {
+				let p = Promise.resolve(event)
+				if (event.repeatRule) {
+					// in case of a repeat rule we want to show the start event for now to indicate that we edit all events.
+					p = load(CalendarEventTypeRef, event._id)
+				}
+				p.then(e => showCalendarEventDialog(getEventStart(e, getTimeZone()), calendarInfos, mailboxDetails, e))
+				 .catch(NotFoundError, () => {
+					 console.log("calendar event not found when clicking on the event")
+				 })
+			})
 	}
 
 	_getSelectedView(): CalendarViewTypeEnum {
@@ -699,8 +696,10 @@ export class CalendarView implements CurrentView {
 		} else {
 			dateToUse = date
 		}
-		let p = this._calendarInfos.isFulfilled() ? this._calendarInfos : showProgressDialog("pleaseWait_msg", this._calendarInfos)
-		p.then(calendars => showCalendarEventDialog(dateToUse, calendars))
+		promiseAll([
+			this._calendarInfos.isFulfilled() ? this._calendarInfos : showProgressDialog("pleaseWait_msg", this._calendarInfos),
+			mailModel.getUserMailboxDetails()
+		]).then(([calendars, mailboxDetails]) => showCalendarEventDialog(dateToUse, calendars, mailboxDetails))
 	}
 
 	/**
@@ -809,49 +808,6 @@ export class CalendarView implements CurrentView {
 		})
 	}
 
-	_loadCalendarInfos(): Promise<Map<Id, CalendarInfo>> {
-		const userId = logins.getUserController().user._id
-		return load(UserTypeRef, userId)
-			.then(user => {
-				const calendarMemberships = user.memberships.filter(m => m.groupType === GroupType.Calendar);
-				const notFoundMemberships = []
-				return Promise
-					.map(calendarMemberships, (membership) => Promise
-						.all([
-							load(CalendarGroupRootTypeRef, membership.group),
-							load(GroupInfoTypeRef, membership.groupInfo),
-							load(GroupTypeRef, membership.group)
-						])
-						.catch(NotFoundError, () => {
-							notFoundMemberships.push(membership)
-							return null
-						})
-					)
-					.then((groupInstances) => {
-						const calendarInfos: Map<Id, CalendarInfo> = new Map()
-						groupInstances.filter(Boolean)
-						              .forEach(([groupRoot, groupInfo, group]) => {
-							              calendarInfos.set(groupRoot._id, {
-								              groupRoot,
-								              groupInfo,
-								              shortEvents: [],
-								              longEvents: new LazyLoaded(() => loadAll(CalendarEventTypeRef, groupRoot.longEvents), []),
-								              group: group,
-								              shared: !isSameId(group.user, userId)
-							              })
-						              })
-
-						// cleanup inconsistent memberships
-						Promise.each(notFoundMemberships, (notFoundMembership) => {
-							const data = createMembershipRemoveData({user: userId, group: notFoundMembership.group})
-							return serviceRequestVoid(SysService.MembershipService, HttpMethod.DELETE, data)
-						})
-						return calendarInfos
-					})
-			})
-			.tap(() => m.redraw())
-	}
-
 	entityEventReceived<T>(updates: $ReadOnlyArray<EntityUpdateData>, eventOwnerGroupId: Id): void {
 		this._calendarInfos.then((calendarEvents) => {
 			updates.forEach(update => {
@@ -887,7 +843,7 @@ export class CalendarView implements CurrentView {
 							if (calendarMemberships.length !== calendarInfos.size) {
 								this._loadedMonths.clear()
 								this._replaceEvents(new Map())
-								this._calendarInfos = this._loadCalendarInfos()
+								this._calendarInfos = loadCalendarInfos()
 								this._calendarInfos.then(() => {
 									const selectedDate = this.selectedDate()
 									const previousMonthDate = new Date(selectedDate)

@@ -334,7 +334,10 @@ export class WorkerImpl {
 			},
 			checkMailForPhishing: (message: Request) => {
 				return locator.mail.checkMailForPhishing(...message.args)
-			}
+			},
+			getEventByUid: (message: Request) => {
+				return locator.calendar.getEventByUid(...message.args)
+			},
 		})
 
 		Promise.onPossiblyUnhandledRejection(e => this.sendError(e));

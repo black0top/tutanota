@@ -3,20 +3,20 @@
 import {create, TypeRef} from "../../common/EntityFunctions"
 
 
-export const RemoteImapSyncInfoTypeRef: TypeRef<RemoteImapSyncInfo> = new TypeRef("tutanota", "RemoteImapSyncInfo")
+export const CalendarEventUidIndexTypeRef: TypeRef<CalendarEventUidIndex> = new TypeRef("tutanota", "CalendarEventUidIndex")
 export const _TypeModel: TypeModel = {
-	"name": "RemoteImapSyncInfo",
-	"since": 1,
+	"name": "CalendarEventUidIndex",
+	"since": 42,
 	"type": "LIST_ELEMENT_TYPE",
-	"id": 183,
-	"rootId": "CHR1dGFub3RhAAC3",
+	"id": 1092,
+	"rootId": "CHR1dGFub3RhAARE",
 	"versioned": false,
 	"encrypted": false,
 	"values": {
 		"_format": {
 			"name": "_format",
-			"id": 187,
-			"since": 1,
+			"id": 1096,
+			"since": 42,
 			"type": "Number",
 			"cardinality": "One",
 			"final": false,
@@ -24,17 +24,17 @@ export const _TypeModel: TypeModel = {
 		},
 		"_id": {
 			"name": "_id",
-			"id": 185,
-			"since": 1,
-			"type": "GeneratedId",
+			"id": 1094,
+			"since": 42,
+			"type": "CustomId",
 			"cardinality": "One",
 			"final": true,
 			"encrypted": false
 		},
 		"_ownerGroup": {
 			"name": "_ownerGroup",
-			"id": 594,
-			"since": 13,
+			"id": 1097,
+			"since": 42,
 			"type": "GeneratedId",
 			"cardinality": "ZeroOrOne",
 			"final": true,
@@ -42,32 +42,23 @@ export const _TypeModel: TypeModel = {
 		},
 		"_permissions": {
 			"name": "_permissions",
-			"id": 186,
-			"since": 1,
+			"id": 1095,
+			"since": 42,
 			"type": "GeneratedId",
 			"cardinality": "One",
 			"final": true,
 			"encrypted": false
-		},
-		"seen": {
-			"name": "seen",
-			"id": 189,
-			"since": 1,
-			"type": "Boolean",
-			"cardinality": "One",
-			"final": false,
-			"encrypted": false
 		}
 	},
 	"associations": {
-		"message": {
-			"name": "message",
-			"id": 188,
-			"since": 1,
+		"calendarEvent": {
+			"name": "calendarEvent",
+			"id": 1098,
+			"since": 42,
 			"type": "LIST_ELEMENT_ASSOCIATION",
 			"cardinality": "One",
-			"refType": "Mail",
-			"final": false,
+			"refType": "CalendarEvent",
+			"final": true,
 			"external": false
 		}
 	},
@@ -75,18 +66,17 @@ export const _TypeModel: TypeModel = {
 	"version": "42"
 }
 
-export function createRemoteImapSyncInfo(values?: $Shape<$Exact<RemoteImapSyncInfo>>): RemoteImapSyncInfo {
-	return Object.assign(create(_TypeModel, RemoteImapSyncInfoTypeRef), values)
+export function createCalendarEventUidIndex(values?: $Shape<$Exact<CalendarEventUidIndex>>): CalendarEventUidIndex {
+	return Object.assign(create(_TypeModel, CalendarEventUidIndexTypeRef), values)
 }
 
-export type RemoteImapSyncInfo = {
-	_type: TypeRef<RemoteImapSyncInfo>;
+export type CalendarEventUidIndex = {
+	_type: TypeRef<CalendarEventUidIndex>;
 
 	_format: NumberString;
 	_id: IdTuple;
 	_ownerGroup: ?Id;
 	_permissions: Id;
-	seen: boolean;
 
-	message: IdTuple;
+	calendarEvent: IdTuple;
 }

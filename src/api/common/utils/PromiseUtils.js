@@ -8,7 +8,7 @@ type PromiseAllTyped = (<A, B>(a: $Promisable<A>, b: $Promisable<B>) => Promise<
 	& (<A, B, C, D>(a: $Promisable<A>, b: $Promisable<B>, c: $Promisable<C>, d: $Promisable<D>) =>
 	Promise<[A, B, C, D]>)
 
-export const all: PromiseAllTyped = downcast((...promises) => Promise.all(promises))
+export const all: PromiseAllTyped = downcast(Promise.all)
 
 type PromiseMapCallback<T, U> = (el: T, index: number) => $Promisable<U>
 
