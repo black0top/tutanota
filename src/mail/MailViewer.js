@@ -5,15 +5,8 @@ import stream from "mithril/stream/stream.js"
 import {ExpanderButton, ExpanderPanel} from "../gui/base/Expander"
 import {ExpanderButtonN, ExpanderPanelN} from "../gui/base/ExpanderN"
 import {load, serviceRequestVoid, update} from "../api/main/Entity"
-import {Button,  createAsyncDropDownButton, createDropDownButton} from "../gui/base/Button"
-import {
-	formatDateTime,
-	formatDateWithWeekday,
-	formatStorageSize,
-	formatTime,
-
-	urlEncodeHtmlTags
-} from "../misc/Formatter"
+import {Button, createAsyncDropDownButton, createDropDownButton} from "../gui/base/Button"
+import {formatDateTime, formatDateWithWeekday, formatStorageSize, formatTime, urlEncodeHtmlTags} from "../misc/Formatter"
 import {windowFacade} from "../misc/WindowFacade"
 import {ease} from "../gui/animation/Easing"
 import type {DomMutation} from "../gui/animation/Animations"
@@ -237,7 +230,6 @@ export class MailViewer {
 		this.view = () => {
 			const dateTime = formatDateWithWeekday(this.mail.receivedDate) + " • " + formatTime(this.mail.receivedDate)
 			expanderStyle.paddingTop = styles.isUsingBottomNavigation() ? "0" : "16px"
-			const firstCalendarFile = this._attachments.find(a => a.mimeType && a.mimeType.startsWith(CALENDAR_MIME_TYPE))
 			return [
 				m("#mail-viewer.fill-absolute"
 					+ (client.isMobileDevice() ? ".scroll-no-overlay.overflow-x-hidden" : ".flex.flex-column"), {
@@ -315,17 +307,6 @@ export class MailViewer {
 									: null,
 							this._renderAttachments(),
 							m("hr.hr.mb.mt-s"),
-							firstCalendarFile
-								? m(".flex.flex-end", [
-									m(ButtonN, {
-										label: "viewOrAddEvent_action",
-										type: ButtonType.Secondary,
-										click: () => {
-											showEventDetailsFromFile(firstCalendarFile)
-										}
-									}),
-								])
-								: null,
 						]),
 
 						m(".rel.margin-are-inset-lr.scroll-x.plr-l.pb-floating"
@@ -875,6 +856,7 @@ export class MailViewer {
 			])
 		} else {
 			const spoilerLimit = this._attachmentsSpoilerLimit()
+			const firstCalendarFile = this._attachments.find(a => a.mimeType && a.mimeType.startsWith(CALENDAR_MIME_TYPE))
 			return m(".flex.ml-negative-bubble.flex-wrap",
 				[
 					this._attachmentButtons.length > spoilerLimit
@@ -893,6 +875,15 @@ export class MailViewer {
 							}, this._attachmentButtons.slice(spoilerLimit).map(m))
 						]
 						: this._attachmentButtons.map(m),
+					firstCalendarFile
+						? m(ButtonN, {
+							label: "viewOrAddEvent_action",
+							type: ButtonType.Secondary,
+							click: () => {
+								showEventDetailsFromFile(firstCalendarFile)
+							}
+						})
+						: null,
 					this._renderDownloadAllButton()
 				]
 			)

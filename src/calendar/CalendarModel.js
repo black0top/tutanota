@@ -355,13 +355,13 @@ class CalendarModel {
 			loadAll(CalendarEventUpdateTypeRef, neverNull(mailboxDetails.mailboxGroupRoot.calendarEventUpdates).list)
 				.then((invites) => {
 					return Promise.each(invites, (invite) => {
-						return this._processCalendarReply(invite)
+						return this._handleCalendarEventUpdate(invite)
 					})
 				})
 		})
 	}
 
-	_processCalendarReply(update: CalendarEventUpdate) {
+	_handleCalendarEventUpdate(update: CalendarEventUpdate) {
 		return load(FileTypeRef, update.file)
 			.then((file) => worker.downloadFileContent(file))
 			.then((dataFile: DataFile) => parseCalendarFile(dataFile))
@@ -375,14 +375,20 @@ class CalendarModel {
 			return
 		}
 		const {event} = calendarData.contents[0]
+		if (event == null || event.uid == null) {
+			console.log("Invalid event: ", event)
+			return
+		}
+		const uid = event.uid
+
 		if (calendarData.method === "REPLY") {
 			// Process it
-			return worker.getEventByUid(neverNull(event.uid)).then((dbEvent) => {
+			return worker.getEventByUid(uid).then((dbEvent) => {
 				if (dbEvent == null) {
-					console.log("event was not found", event.uid)
+					console.log("event was not found", uid)
 					return
 				}
-				const replyAttendee = event.attendees.find((a) => a.address === sender)
+				const replyAttendee = event.attendees.find((a) => a.address.address === sender)
 				if (replyAttendee == null) {
 					console.log("Sender is not among attendees, ignoring", replyAttendee)
 					return
@@ -401,7 +407,7 @@ class CalendarModel {
 				return worker.updateCalendarEvent(updatedEvent, [], dbEvent)
 			})
 		} else if (calendarData.method === "REQUEST") { // Either initial invite or update
-			return worker.getEventByUid(neverNull(event.uid)).then((dbEvent) => {
+			return worker.getEventByUid(uid).then((dbEvent) => {
 				if (dbEvent) {
 					// then it's an update
 					if (dbEvent.organizer !== sender) {
@@ -417,6 +423,17 @@ class CalendarModel {
 					return worker.updateCalendarEvent(newEvent, [], dbEvent)
 				}
 				// We might want to insert new invitation for the user if it's a new invite
+			})
+		} else if (calendarData.method === "CANCEL") {
+			return worker.getEventByUid(uid).then((dbEvent) => {
+				if (dbEvent != null) {
+					if (dbEvent.organizer !== sender) {
+						console.log("CANCEL sent not by organizer, ignoring")
+						return
+					}
+					console.log("Deleting cancelled event", uid, dbEvent._id)
+					return erase(dbEvent)
+				}
 			})
 		}
 	}
@@ -533,9 +550,8 @@ class CalendarModel {
 				getFromMap(this._pendingAlarmRequests, entityEventData.instanceId, defer).resolve()
 			} else if (isUpdateForTypeRef(CalendarEventUpdateTypeRef, entityEventData)
 				&& entityEventData.operation === OperationType.CREATE) {
-				console.log("create for invite", entityEventData)
 				load(CalendarEventUpdateTypeRef, [entityEventData.instanceListId, entityEventData.instanceId])
-					.then((invite) => this._processCalendarReply(invite))
+					.then((invite) => this._handleCalendarEventUpdate(invite))
 					.catch(NotFoundError, (e) => {
 						console.log("invite not found", [entityEventData.instanceListId, entityEventData.instanceId], e)
 					})
