@@ -49,8 +49,6 @@ type Bluebird$ConcurrencyOption = {
 	concurrency: number,
 };
 
-declare type $Promisable<+T> = Promise<T> | T;
-
 declare class Promise<+R> {
 	constructor(callback: (resolve: (result: Promise<R> | R) => void,
 	                       reject: (error: any) => void) => mixed): void;
@@ -111,3 +109,5 @@ declare class Promise<+R> {
 
 	static onPossiblyUnhandledRejection(errorHandler: Function): void;
 }
+
+declare type $Promisable<+T> = Promise<T> | T;
