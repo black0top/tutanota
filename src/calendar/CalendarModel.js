@@ -1,7 +1,7 @@
 //@flow
 import type {CalendarMonthTimeRange} from "./CalendarUtils"
 import {
-	assignEventId, copyEvent,
+	assignEventId,
 	getAllDayDateForTimezone,
 	getAllDayDateUTCFromZone,
 	getDiffInDays,
@@ -46,6 +46,7 @@ import {GroupInfoTypeRef} from "../api/entities/sys/GroupInfo"
 import type {CalendarInfo} from "./CalendarView"
 import {mailModel} from "../mail/MailModel"
 import {FileTypeRef} from "../api/entities/tutanota/File"
+import type {ParsedCalendarData} from "./CalendarImporter"
 import {parseCalendarFile} from "./CalendarImporter"
 import {module as replaced} from "@hot"
 import type {CalendarEventUpdate} from "../api/entities/tutanota/CalendarEventUpdate"
@@ -364,49 +365,60 @@ class CalendarModel {
 		return load(FileTypeRef, update.file)
 			.then((file) => worker.downloadFileContent(file))
 			.then((dataFile: DataFile) => parseCalendarFile(dataFile))
-			.then((parsedCalendarData) => {
-				if (parsedCalendarData.method === "REPLY") {
-					// Process it
-					if (parsedCalendarData.contents.length > 0) {
-						const replyEvent = parsedCalendarData.contents[0].event
-						return worker.getEventByUid(neverNull(replyEvent.uid)).then((dbEvent) => {
-							// TODO: this is not how we should find out attendee. Need to prove that it is authorized.
-							const replyAttendee = replyEvent.attendees[0]
-							if (dbEvent && replyAttendee) {
-								const updatedEvent = clone(dbEvent)
-								const dbAttendee = updatedEvent.attendees.find((a) =>
-									replyAttendee.address.address === a.address.address)
-								if (dbAttendee) {
-									dbAttendee.status = replyAttendee.status
-									console.log("updating event with reply status", updatedEvent.uid, updatedEvent._id)
-									// TODO: check alarmInfo
-									return worker.updateCalendarEvent(updatedEvent, [], dbEvent)
-								} else {
-									console.log("Attendee was not found", dbEvent._id, replyAttendee)
-								}
-							} else {
-								console.log("event was not found", replyEvent.uid)
-							}
-						})
-					}
-				} else if (parsedCalendarData.method === "REQUEST") { // it is an initial request (if we don't have this yet) orss
-					const replyEvent = parsedCalendarData.contents[0].event
-					return worker.getEventByUid(neverNull(replyEvent.uid)).then((dbEvent) => {
-						if (dbEvent) {
-							// then it's an update
-							// TODO: check alarms
-							const newEvent = clone(dbEvent)
-							newEvent.attendees = replyEvent.attendees
-							newEvent.summary = replyEvent.summary
-							newEvent.sequence = replyEvent.sequence
-							console.log("Updating event", dbEvent.uid, dbEvent._id)
-							return worker.updateCalendarEvent(newEvent, [], dbEvent)
-						}
-						// We might want to insert new invitation for the user if it's a new invite
-					})
-				}
-			})
+			.then((parsedCalendarData) => this._processCalendarUpdate(update.sender, parsedCalendarData))
 			.then(() => erase(update))
+	}
+
+	_processCalendarUpdate(sender: string, calendarData: ParsedCalendarData) {
+		if (calendarData.contents.length !== 1) {
+			console.log(`Calendar update with ${calendarData.contents.length} events, ignoring`)
+			return
+		}
+		const {event} = calendarData.contents[0]
+		if (calendarData.method === "REPLY") {
+			// Process it
+			return worker.getEventByUid(neverNull(event.uid)).then((dbEvent) => {
+				if (dbEvent == null) {
+					console.log("event was not found", event.uid)
+					return
+				}
+				const replyAttendee = event.attendees.find((a) => a.address === sender)
+				if (replyAttendee == null) {
+					console.log("Sender is not among attendees, ignoring", replyAttendee)
+					return
+				}
+
+				const updatedEvent = clone(dbEvent)
+				const dbAttendee = updatedEvent.attendees.find((a) =>
+					replyAttendee.address.address === a.address.address)
+				if (dbAttendee == null) {
+					console.log("Attendee was not found", dbEvent._id, replyAttendee)
+					return
+				}
+				dbAttendee.status = replyAttendee.status
+				console.log("updating event with reply status", updatedEvent.uid, updatedEvent._id)
+				// TODO: check alarmInfo
+				return worker.updateCalendarEvent(updatedEvent, [], dbEvent)
+			})
+		} else if (calendarData.method === "REQUEST") { // Either initial invite or update
+			return worker.getEventByUid(neverNull(event.uid)).then((dbEvent) => {
+				if (dbEvent) {
+					// then it's an update
+					if (dbEvent.organizer !== sender) {
+						console.log("REQUEST sent not by organizer, ignoring")
+						return
+					}
+					// TODO: check alarms
+					const newEvent = clone(dbEvent)
+					newEvent.attendees = event.attendees
+					newEvent.summary = event.summary
+					newEvent.sequence = event.sequence
+					console.log("Updating event", dbEvent.uid, dbEvent._id)
+					return worker.updateCalendarEvent(newEvent, [], dbEvent)
+				}
+				// We might want to insert new invitation for the user if it's a new invite
+			})
+		}
 	}
 
 	init(): Promise<void> {

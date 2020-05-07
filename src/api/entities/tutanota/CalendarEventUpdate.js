@@ -11,7 +11,7 @@ export const _TypeModel: TypeModel = {
 	"id": 1103,
 	"rootId": "CHR1dGFub3RhAARP",
 	"versioned": false,
-	"encrypted": false,
+	"encrypted": true,
 	"values": {
 		"_format": {
 			"name": "_format",
@@ -28,6 +28,15 @@ export const _TypeModel: TypeModel = {
 			"since": 42,
 			"type": "GeneratedId",
 			"cardinality": "One",
+			"final": true,
+			"encrypted": false
+		},
+		"_ownerEncSessionKey": {
+			"name": "_ownerEncSessionKey",
+			"id": 1109,
+			"since": 42,
+			"type": "Bytes",
+			"cardinality": "ZeroOrOne",
 			"final": true,
 			"encrypted": false
 		},
@@ -48,12 +57,21 @@ export const _TypeModel: TypeModel = {
 			"cardinality": "One",
 			"final": true,
 			"encrypted": false
+		},
+		"sender": {
+			"name": "sender",
+			"id": 1110,
+			"since": 42,
+			"type": "String",
+			"cardinality": "One",
+			"final": true,
+			"encrypted": false
 		}
 	},
 	"associations": {
 		"file": {
 			"name": "file",
-			"id": 1109,
+			"id": 1111,
 			"since": 42,
 			"type": "LIST_ELEMENT_ASSOCIATION",
 			"cardinality": "One",
@@ -72,11 +90,14 @@ export function createCalendarEventUpdate(values?: $Shape<$Exact<CalendarEventUp
 
 export type CalendarEventUpdate = {
 	_type: TypeRef<CalendarEventUpdate>;
+	_errors: Object;
 
 	_format: NumberString;
 	_id: IdTuple;
+	_ownerEncSessionKey: ?Uint8Array;
 	_ownerGroup: ?Id;
 	_permissions: Id;
+	sender: string;
 
 	file: IdTuple;
 }

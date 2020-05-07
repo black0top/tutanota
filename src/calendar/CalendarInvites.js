@@ -25,9 +25,10 @@ import {lang} from "../misc/LanguageViewModel"
 import type {MailAddress} from "../api/entities/tutanota/MailAddress"
 import type {File as TutanotaFile} from "../api/entities/tutanota/File"
 import {loadCalendarInfos} from "./CalendarModel"
+import type {EncryptedMailAddress} from "../api/entities/tutanota/EncryptedMailAddress"
 
 
-export function sendCalendarInvite(existingEvent: CalendarEvent, alarms: Array<AlarmInfo>, recipients: $ReadOnlyArray<MailAddress>) {
+export function sendCalendarInvite(existingEvent: CalendarEvent, alarms: Array<AlarmInfo>, recipients: $ReadOnlyArray<EncryptedMailAddress>) {
 	return mailModel.getUserMailboxDetails().then((mailboxDetails) => {
 		if (existingEvent.organizer == null) {
 			throw new Error("Cannot send invite if organizer is not sent")
@@ -63,7 +64,7 @@ export function sendCalendarInviteResponse(event: CalendarEvent, sender: MailAdd
 	})
 }
 
-export function sendCalendarUpdate(event: CalendarEvent, recipients: $ReadOnlyArray<MailAddress>) {
+export function sendCalendarUpdate(event: CalendarEvent, recipients: $ReadOnlyArray<EncryptedMailAddress>) {
 	return mailModel.getUserMailboxDetails().then((mailboxDetails) => {
 		const editor = new MailEditor(mailboxDetails)
 		const bcc = recipients.map(({name, address}) => ({
@@ -78,7 +79,7 @@ export function sendCalendarUpdate(event: CalendarEvent, recipients: $ReadOnlyAr
 	})
 }
 
-export function sendCalendarCancellation(event: CalendarEvent, recipients: $ReadOnlyArray<MailAddress>) {
+export function sendCalendarCancellation(event: CalendarEvent, recipients: $ReadOnlyArray<EncryptedMailAddress>) {
 	return mailModel.getUserMailboxDetails().then((mailboxDetails) => {
 		const editor = new MailEditor(mailboxDetails)
 		const bcc = recipients.map(({name, address}) => ({

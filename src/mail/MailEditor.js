@@ -158,10 +158,9 @@ export class MailEditor {
 	 */
 	constructor(mailboxDetails: MailboxDetail) {
 		this.conversationType = ConversationType.NEW
-		const bubbleCreator = this.createBubble.bind(this)
-		this.toRecipients = new BubbleTextField("to_label", new MailAddressBubbleHandler(bubbleCreator))
-		this.ccRecipients = new BubbleTextField("cc_label", new MailAddressBubbleHandler(bubbleCreator))
-		this.bccRecipients = new BubbleTextField("bcc_label", new MailAddressBubbleHandler(bubbleCreator))
+		this.toRecipients = new BubbleTextField("to_label", new MailAddressBubbleHandler(this))
+		this.ccRecipients = new BubbleTextField("cc_label", new MailAddressBubbleHandler(this))
+		this.bccRecipients = new BubbleTextField("bcc_label", new MailAddressBubbleHandler(this))
 		this._replyTos = []
 		this._mailAddressToPasswordField = new Map()
 		this._attachments = []

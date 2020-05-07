@@ -8,14 +8,14 @@ export const _TypeModel: TypeModel = {
 	"name": "CalendarFileMethod",
 	"since": 42,
 	"type": "AGGREGATED_TYPE",
-	"id": 1110,
-	"rootId": "CHR1dGFub3RhAARW",
+	"id": 1112,
+	"rootId": "CHR1dGFub3RhAARY",
 	"versioned": false,
 	"encrypted": false,
 	"values": {
 		"_id": {
 			"name": "_id",
-			"id": 1111,
+			"id": 1113,
 			"since": 42,
 			"type": "CustomId",
 			"cardinality": "One",
@@ -24,7 +24,7 @@ export const _TypeModel: TypeModel = {
 		},
 		"method": {
 			"name": "method",
-			"id": 1112,
+			"id": 1114,
 			"since": 42,
 			"type": "Number",
 			"cardinality": "One",
@@ -35,7 +35,7 @@ export const _TypeModel: TypeModel = {
 	"associations": {
 		"file": {
 			"name": "file",
-			"id": 1113,
+			"id": 1115,
 			"since": 42,
 			"type": "LIST_ELEMENT_ASSOCIATION",
 			"cardinality": "One",

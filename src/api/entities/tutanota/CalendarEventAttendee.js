@@ -2,7 +2,7 @@
 
 import {create, TypeRef} from "../../common/EntityFunctions"
 
-import type {MailAddress} from "./MailAddress"
+import type {EncryptedMailAddress} from "./EncryptedMailAddress"
 
 export const CalendarEventAttendeeTypeRef: TypeRef<CalendarEventAttendee> = new TypeRef("tutanota", "CalendarEventAttendee")
 export const _TypeModel: TypeModel = {
@@ -40,7 +40,7 @@ export const _TypeModel: TypeModel = {
 			"since": 42,
 			"type": "AGGREGATION",
 			"cardinality": "One",
-			"refType": "MailAddress",
+			"refType": "EncryptedMailAddress",
 			"final": false
 		}
 	},
@@ -58,5 +58,5 @@ export type CalendarEventAttendee = {
 	_id: Id;
 	status: NumberString;
 
-	address: MailAddress;
+	address: EncryptedMailAddress;
 }

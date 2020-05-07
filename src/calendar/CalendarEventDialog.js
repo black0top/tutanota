@@ -72,6 +72,7 @@ import {createMailAddress} from "../api/entities/tutanota/MailAddress"
 import {sendCalendarCancellation, sendCalendarInvite, sendCalendarInviteResponse, sendCalendarUpdate} from "./CalendarInvites"
 import {client} from "../misc/ClientDetector"
 import type {CalendarRepeatRule} from "../api/entities/tutanota/CalendarRepeatRule"
+import {createEncryptedMailAddress} from "../api/entities/tutanota/EncryptedMailAddress"
 
 const TIMESTAMP_ZERO_YEAR = 1970
 
@@ -313,7 +314,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		const address = getCleanedMailAddress(inviteFieldValue())
 		if (address) {
 			attendees.push(createCalendarEventAttendee({
-				address: createMailAddress({address,}),
+				address: createEncryptedMailAddress({address}),
 				status: CalendarAttendeeStatus.NEEDS_ACTION,
 			}))
 			inviteFieldValue("")

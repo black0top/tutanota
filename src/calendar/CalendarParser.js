@@ -28,6 +28,7 @@ import {filterInt} from "./CalendarUtils"
 import type {CalendarEvent} from "../api/entities/tutanota/CalendarEvent"
 import type {AlarmInfo} from "../api/entities/sys/AlarmInfo"
 import type {RepeatRule} from "../api/entities/sys/RepeatRule"
+import {createEncryptedMailAddress} from "../api/entities/tutanota/EncryptedMailAddress"
 
 function parseDateString(dateString: string): {year: number, month: number, day: number} {
 	const year = parseInt(dateString.slice(0, 4))
@@ -445,7 +446,7 @@ export function parseCalendarEvents(icalObject: ICalObject, zone: string): Parse
 				if (!status) return
 
 				attendees.push(createCalendarEventAttendee({
-					address: createMailAddress({
+					address: createEncryptedMailAddress({
 						address: property.value.substring("mailto:".length),
 						name: property.params["CN"],
 					}),
