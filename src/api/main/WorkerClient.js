@@ -539,7 +539,7 @@ export class WorkerClient {
 		return this._queue.postMessage(new Request("createCalendarEvent", [event, alarmInfo, oldEvent]))
 	}
 
-	updateCalendarEvent(event: CalendarEvent, alarmInfo: Array<AlarmInfo>, oldEvent: ?CalendarEvent) {
+	updateCalendarEvent(event: CalendarEvent, alarmInfo: Array<AlarmInfo>, oldEvent: CalendarEvent) {
 		return this._queue.postMessage(new Request("updateCalendarEvent", [event, alarmInfo, oldEvent]))
 	}
 

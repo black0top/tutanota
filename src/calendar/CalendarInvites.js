@@ -1,6 +1,5 @@
 //@flow
 
-import {getDefaultSender} from "../mail/MailUtils"
 import {mailModel} from "../mail/MailModel"
 import {calendarAttendeeStatusDescription, formatEventDuration, getTimeZone} from "./CalendarUtils"
 import {theme} from "../gui/theme"
@@ -30,7 +29,9 @@ import {loadCalendarInfos} from "./CalendarModel"
 
 export function sendCalendarInvite(existingEvent: CalendarEvent, alarms: Array<AlarmInfo>, recipients: $ReadOnlyArray<MailAddress>) {
 	return mailModel.getUserMailboxDetails().then((mailboxDetails) => {
-		existingEvent.organizer = existingEvent.organizer || getDefaultSender(mailboxDetails)
+		if (existingEvent.organizer == null) {
+			throw new Error("Cannot send invite if organizer is not sent")
+		}
 
 		const editor = new MailEditor(mailboxDetails)
 		const message = lang.get("eventInviteMail_msg", {"{event}": existingEvent.summary})
@@ -72,15 +73,14 @@ export function sendCalendarUpdate(event: CalendarEvent, recipients: $ReadOnlyAr
 		editor.initWithTemplate({bcc}, lang.get("eventUpdated_msg", {"event": event.summary}),
 			makeInviteEmailBody(event, ""))
 
-		const file = makeInvitationCalendarFile(event, IcalendarCalendarMethod.PUBLISH, new Date(), getTimeZone())
-		sendCalendarFile(editor, file, CalendarMethod.PUBLISH)
+		const file = makeInvitationCalendarFile(event, IcalendarCalendarMethod.REQUEST, new Date(), getTimeZone())
+		sendCalendarFile(editor, file, CalendarMethod.REQUEST)
 	})
 }
 
 export function sendCalendarCancellation(event: CalendarEvent, recipients: $ReadOnlyArray<MailAddress>) {
 	return mailModel.getUserMailboxDetails().then((mailboxDetails) => {
 		const editor = new MailEditor(mailboxDetails)
-		// TODO: pass as bcc
 		const bcc = recipients.map(({name, address}) => ({
 			name,
 			address
@@ -182,9 +182,8 @@ export function showEventDetailsFromFile(firstCalendarFile: TutanotaFile) {
 								            .then(() =>
 									            showCalendarEventDialog(parsedEvent.startTime, calendarInfo, mailboxDetails, parsedEvent))
 							      })
-
 						      } else {
-							      showCalendarEventDialog(existingEvent.startTime, calendarInfo, existingEvent)
+							      showCalendarEventDialog(existingEvent.startTime, calendarInfo, mailboxDetails, existingEvent)
 						      }
 					      }
 				      })

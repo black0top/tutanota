@@ -638,7 +638,7 @@ export class CalendarView implements CurrentView {
 	}
 
 	_onEventSelected(event: CalendarEvent) {
-		promiseAll([this._calendarInfos, mailModel.getUserMailboxDetails()])
+		promiseAll(this._calendarInfos, mailModel.getUserMailboxDetails())
 			.then(([calendarInfos, mailboxDetails]) => {
 				let p = Promise.resolve(event)
 				if (event.repeatRule) {
@@ -696,10 +696,10 @@ export class CalendarView implements CurrentView {
 		} else {
 			dateToUse = date
 		}
-		promiseAll([
+		promiseAll(
 			this._calendarInfos.isFulfilled() ? this._calendarInfos : showProgressDialog("pleaseWait_msg", this._calendarInfos),
 			mailModel.getUserMailboxDetails()
-		]).then(([calendars, mailboxDetails]) => showCalendarEventDialog(dateToUse, calendars, mailboxDetails))
+		).then(([calendars, mailboxDetails]) => showCalendarEventDialog(dateToUse, calendars, mailboxDetails))
 	}
 
 	/**

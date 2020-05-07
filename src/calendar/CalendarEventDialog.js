@@ -17,7 +17,7 @@ import type {CalendarEvent} from "../api/entities/tutanota/CalendarEvent"
 import {createCalendarEvent} from "../api/entities/tutanota/CalendarEvent"
 import {erase, load} from "../api/main/Entity"
 
-import {downcast, neverNull, noOp} from "../api/common/utils/Utils"
+import {clone, downcast, neverNull, noOp} from "../api/common/utils/Utils"
 import {ButtonN, ButtonType} from "../gui/base/ButtonN"
 import type {AlarmIntervalEnum, EndTypeEnum, RepeatPeriodEnum} from "../api/common/TutanotaConstants"
 import {
@@ -38,8 +38,8 @@ import {isSameId, listIdPart} from "../api/common/EntityFunctions"
 import {logins} from "../api/main/LoginController"
 import {UserAlarmInfoTypeRef} from "../api/entities/sys/UserAlarmInfo"
 import {
-	calendarAttendeeStatusDescription,
 	assignEventId,
+	calendarAttendeeStatusDescription,
 	createRepeatRuleWithValues,
 	filterInt,
 	generateUid,
@@ -332,7 +332,10 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 	}
 
 	const okAction = (dialog) => {
-		const newEvent = createCalendarEvent()
+		// We have to use existing instance to get all the final fields correctly
+		// Using clone feels hacky but otherwise we need to save all attributes of the existing event somewhere and if dialog is
+		// cancelled we also don't want to modify passed event
+		const newEvent = existingEvent ? clone(existingEvent) : createCalendarEvent()
 		if (!startDatePicker.date() || !endDatePicker.date()) {
 			Dialog.error("timeFormatInvalid_msg")
 			return
@@ -416,6 +419,9 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		}
 		let newAttendees = []
 		let existingAttendees = []
+
+		newEvent.organizer = organizer()
+
 		if (isOwnEvent) {
 			if (existingEvent) {
 				attendees.forEach((a) => {

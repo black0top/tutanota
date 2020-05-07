@@ -1,7 +1,7 @@
 //@flow
 import type {CalendarMonthTimeRange} from "./CalendarUtils"
 import {
-	copyEvent,
+	assignEventId, copyEvent,
 	getAllDayDateForTimezone,
 	getAllDayDateUTCFromZone,
 	getDiffInDays,
@@ -40,6 +40,7 @@ import {client} from "../misc/ClientDetector"
 import {insertIntoSortedArray} from "../api/common/utils/ArrayUtils"
 import m from "mithril"
 import {UserTypeRef} from "../api/entities/sys/User"
+import type {CalendarGroupRoot} from "../api/entities/tutanota/CalendarGroupRoot"
 import {CalendarGroupRootTypeRef} from "../api/entities/tutanota/CalendarGroupRoot"
 import {GroupInfoTypeRef} from "../api/entities/sys/GroupInfo"
 import type {CalendarInfo} from "./CalendarView"
@@ -53,6 +54,7 @@ import {LazyLoaded} from "../api/common/utils/LazyLoaded"
 import {createMembershipRemoveData} from "../api/entities/sys/MembershipRemoveData"
 import {SysService} from "../api/entities/sys/Services"
 import {GroupTypeRef} from "../api/entities/sys/Group"
+import type {AlarmInfo} from "../api/entities/sys/AlarmInfo"
 
 
 function eventComparator(l: CalendarEvent, r: CalendarEvent): number {
@@ -368,15 +370,17 @@ class CalendarModel {
 					if (parsedCalendarData.contents.length > 0) {
 						const replyEvent = parsedCalendarData.contents[0].event
 						return worker.getEventByUid(neverNull(replyEvent.uid)).then((dbEvent) => {
+							// TODO: this is not how we should find out attendee. Need to prove that it is authorized.
 							const replyAttendee = replyEvent.attendees[0]
 							if (dbEvent && replyAttendee) {
-								const dbAttendee = dbEvent.attendees.find((a) =>
+								const updatedEvent = clone(dbEvent)
+								const dbAttendee = updatedEvent.attendees.find((a) =>
 									replyAttendee.address.address === a.address.address)
 								if (dbAttendee) {
 									dbAttendee.status = replyAttendee.status
-									const updatedEvent = copyEvent(dbEvent, {})
 									console.log("updating event with reply status", updatedEvent.uid, updatedEvent._id)
-									return worker.createCalendarEvent(updatedEvent, [], dbEvent)
+									// TODO: check alarmInfo
+									return worker.updateCalendarEvent(updatedEvent, [], dbEvent)
 								} else {
 									console.log("Attendee was not found", dbEvent._id, replyAttendee)
 								}
@@ -385,6 +389,21 @@ class CalendarModel {
 							}
 						})
 					}
+				} else if (parsedCalendarData.method === "REQUEST") { // it is an initial request (if we don't have this yet) orss
+					const replyEvent = parsedCalendarData.contents[0].event
+					return worker.getEventByUid(neverNull(replyEvent.uid)).then((dbEvent) => {
+						if (dbEvent) {
+							// then it's an update
+							// TODO: check alarms
+							const newEvent = clone(dbEvent)
+							newEvent.attendees = replyEvent.attendees
+							newEvent.summary = replyEvent.summary
+							newEvent.sequence = replyEvent.sequence
+							console.log("Updating event", dbEvent.uid, dbEvent._id)
+							return worker.updateCalendarEvent(newEvent, [], dbEvent)
+						}
+						// We might want to insert new invitation for the user if it's a new invite
+					})
 				}
 			})
 			.then(() => erase(update))
@@ -433,6 +452,12 @@ class CalendarModel {
 				this._scheduleNotification(getElementId(userAlarmInfo), event, calculateAlarmTime(event.startTime, downcast(userAlarmInfo.alarmInfo.trigger)))
 			}
 		}
+	}
+
+	createEvent(newEvent: CalendarEvent, newAlarms: Array<AlarmInfo>, existingEvent: CalendarEvent,
+	            groupRoot: CalendarGroupRoot): Promise<void> {
+		assignEventId(newEvent, getTimeZone(), groupRoot)
+		return worker.createCalendarEvent(newEvent, newAlarms, existingEvent)
 	}
 
 	_scheduleNotification(identifier: string, event: CalendarEvent, time: Date) {
