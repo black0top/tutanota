@@ -3,7 +3,7 @@ import {px, size} from "../gui/size"
 import {incrementDate} from "../api/common/utils/DateUtils"
 import stream from "mithril/stream/stream.js"
 import {DatePicker} from "../gui/base/DatePicker"
-import {Dialog} from "../gui/base/Dialog"
+import {Dialog, DialogType} from "../gui/base/Dialog"
 import type {CalendarInfo} from "./CalendarView"
 import {LIMIT_PAST_EVENTS_YEARS} from "./CalendarView"
 import m from "mithril"
@@ -18,6 +18,7 @@ import {createCalendarEvent} from "../api/entities/tutanota/CalendarEvent"
 import {erase, load} from "../api/main/Entity"
 
 import {clone, downcast, neverNull, noOp} from "../api/common/utils/Utils"
+import type {ButtonAttrs} from "../gui/base/ButtonN"
 import {ButtonN, ButtonType} from "../gui/base/ButtonN"
 import type {AlarmIntervalEnum, EndTypeEnum, RepeatPeriodEnum} from "../api/common/TutanotaConstants"
 import {
@@ -29,7 +30,7 @@ import {
 	ShareCapability,
 	TimeFormat
 } from "../api/common/TutanotaConstants"
-import {last, lastThrow, numberRange, remove} from "../api/common/utils/ArrayUtils"
+import {findAndRemove, last, lastThrow, numberRange, remove} from "../api/common/utils/ArrayUtils"
 import {incrementByRepeatPeriod} from "./CalendarModel"
 import {DateTime} from "luxon"
 import type {AlarmInfo} from "../api/entities/sys/AlarmInfo"
@@ -63,16 +64,19 @@ import {worker} from "../api/main/WorkerClient"
 import {NotFoundError} from "../api/common/error/RestError"
 import {TimePicker} from "../gui/base/TimePicker"
 import {windowFacade} from "../misc/WindowFacade"
-import {ExpanderButtonN, ExpanderPanelN} from "../gui/base/ExpanderN"
-import {getDefaultSenderFromUser, getEnabledMailAddresses} from "../mail/MailUtils"
+import {createRecipientInfo, getDefaultSenderFromUser, getDisplayText, getEnabledMailAddresses} from "../mail/MailUtils"
 import type {MailboxDetail} from "../mail/MailModel"
 import {createCalendarEventAttendee} from "../api/entities/tutanota/CalendarEventAttendee"
 import {getCleanedMailAddress} from "../misc/Formatter"
 import {createMailAddress} from "../api/entities/tutanota/MailAddress"
 import {sendCalendarCancellation, sendCalendarInvite, sendCalendarInviteResponse, sendCalendarUpdate} from "./CalendarInvites"
-import {client} from "../misc/ClientDetector"
 import type {CalendarRepeatRule} from "../api/entities/tutanota/CalendarRepeatRule"
 import {createEncryptedMailAddress} from "../api/entities/tutanota/EncryptedMailAddress"
+import {Bubble, BubbleTextField} from "../gui/base/BubbleTextField"
+import {MailAddressBubbleHandler} from "../misc/MailAddressBubbleHandler"
+import type {Contact} from "../api/entities/tutanota/Contact"
+import {attachDropdown} from "../gui/base/DropdownN"
+import {DialogHeaderBar} from "../gui/base/DialogHeaderBar"
 
 const TIMESTAMP_ZERO_YEAR = 1970
 
@@ -478,11 +482,98 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		})
 	}
 
-	const dialog = Dialog.createActionDialog({
-		title: () => lang.get("createEvent_label"),
-		child: () => m("", {
-			oncreate: () => windowCloseUnsubscribe = windowFacade.addWindowCloseListener(() => {}),
-			onremove: () => windowCloseUnsubscribe()
+	const attendeesField = makeAttendeesField()
+
+
+	type Page = {
+		header: () => Children,
+		body: (index: number) => Children,
+	}
+
+	const pages: Array<Page> = []
+	const popPage = () => pages.pop()
+
+
+	function renderInviting(index: number): Children {
+		return m(OverlayPage, {z: index}, m(".plr-l", m(attendeesField)))
+	}
+
+	function renderAttendees(index: number): Children {
+		return m(OverlayPage, {z: index}, m(".plr-l", [
+				m(".flex-end", m(ButtonN, {
+					label: () => "Add attendees",
+					click: () => pages.push(invitingPage),
+					type: ButtonType.Secondary,
+				})),
+				attendees.map(a => m(".flex", [
+					m(".flex-grow", {
+							style: {
+								height: px(size.button_height),
+								"lineHeight": px(size.button_height),
+							},
+						},
+						`${calendarAttendeeStatusDescription(getAttendeeStatus(a))} ${a.address.name || ""} ${a.address.address}`),
+					isOwnEvent
+						? m(ButtonN, {
+							label: "delete_action",
+							type: ButtonType.Action,
+							icon: () => Icons.Cancel,
+							click: () => {
+								remove(attendees, a)
+							}
+						})
+						: null
+				]))
+			])
+		)
+	}
+
+	const attendeesPage = {
+		header: () => m(DialogHeaderBar, {
+			left: [{label: "back_action", click: popPage, type: ButtonType.Secondary}],
+			right: [],
+			middle: () => lang.get("attendees_label"),
+		}),
+		body: renderAttendees
+	}
+	const invitingPage = {
+		header: () => m(DialogHeaderBar, {
+			left: [{label: "back_action", click: popPage, type: ButtonType.Secondary}],
+			right: [
+				{
+					label: "add_action",
+					click: () => {
+						attendeesField.bubbles.forEach((bubble) => {
+							const newAttendee = createCalendarEventAttendee({
+								address: createEncryptedMailAddress({
+									address: bubble.entity.mailAddress,
+									name: bubble.entity.name,
+								})
+							})
+							attendeesField.bubbles.length = 0
+							attendees.push(newAttendee)
+						})
+						popPage()
+					},
+					type: ButtonType.Primary,
+				},
+			],
+			middle: () => "Invite",
+		}),
+		body: renderInviting
+	}
+
+
+	function attendeesClicked() {
+		pages.push(attendees.length === 0 ? invitingPage : attendeesPage)
+	}
+
+	function renderEditing() {
+		return m(".calendar-edit-container.scroll.plr-l.pb", {
+			style: {
+				transition: "opacity 200ms",
+				// opacity: state === "editing" ? 1 : 0,
+			}
 		}, [
 			m(TextFieldN, {
 				label: "title_placeholder",
@@ -580,45 +671,17 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 					m("", organizer())
 				]),
 			[
-				m(ExpanderButtonN, {
+				m(TextFieldN, {
 					label: "attendees_label",
-					expanded: attendeesExpanded,
-				}),
-				m(ExpanderPanelN, {
-					expanded: attendeesExpanded,
-				}, [
-					m(TextFieldN, {
-						class: "mt-negative-s",
-						label: "invite_action",
-						value: inviteFieldValue,
-						keyHandler: (keyPress) => {
-							if (keyPress.keyCode === 13) {
-								addAttendee()
-								return false
-							}
-							return true
-						}
+					value: stream(String(attendees.length)),
+					disabled: true,
+					injectionsRight: () => m(ButtonN, {
+						label: "attendees_label",
+						type: ButtonType.Action,
+						icon: () => Icons.ArrowForward,
+						click: attendeesClicked,
 					}),
-					attendees.map(a => m(".flex", [
-						m(".flex-grow", {
-								style: {
-									height: px(size.button_height),
-									"lineHeight": px(size.button_height),
-								},
-							},
-							`${a.address.name || ""} ${a.address.address} ${calendarAttendeeStatusDescription(getAttendeeStatus(a))}`),
-						isOwnEvent
-							? m(ButtonN, {
-								label: "delete_action",
-								type: ButtonType.Action,
-								icon: () => Icons.Cancel,
-								click: () => {
-									remove(attendees, a)
-								}
-							})
-							: null
-					]))
-				]),
+				}),
 			],
 			!isOwnEvent
 				? m(DropDownSelectorN, participationDropdownAttrs)
@@ -641,14 +704,31 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 					})
 				}
 			})) : null,
-		]),
-		okAction: readOnly ? null : (dialog) => requestAnimationFrame(() => okAction(dialog))
-
-	})
-	if (client.isMobileDevice()) {
-		// suppress keyboard on mobile
-		dialog.setFocusOnLoadFunction(function () {})
+		])
 	}
+
+	const editingPage = {
+		header: () => m(DialogHeaderBar, {
+			left: [{label: "cancel_action", click: () => dialog.close(), type: ButtonType.Secondary}],
+			right: [{label: "ok_action", click: () => okAction(dialog), type: ButtonType.Primary}],
+			middle: () => lang.get("createEvent_label"),
+		}),
+		body: renderEditing,
+	}
+
+	pages.push(editingPage)
+
+	const dialog = new Dialog(DialogType.EditSmall, {
+		view: () => [
+			m(".dialog-header.plr-l", lastThrow(pages).header()),
+			m(".dialog-max-height.text-break.rel",
+				{
+					oncreate: () => windowCloseUnsubscribe = windowFacade.addWindowCloseListener(() => {}),
+					onremove: () => windowCloseUnsubscribe()
+				}, pages.map((p, i) => p.body(i))
+			)
+		]
+	})
 	dialog.show()
 }
 
@@ -718,7 +798,57 @@ export function createEndCountPicker(): DropDownSelectorAttrs<number> {
 	}
 }
 
+function makeAttendeesField(): BubbleTextField<RecipientInfo> {
+	const invitePeopleValueTextField = new BubbleTextField("shareWithEmailRecipient_label", new MailAddressBubbleHandler({
+		createBubble(name: ?string, mailAddress: string, contact: ?Contact): Bubble<RecipientInfo> {
+			const recipientInfo = createRecipientInfo(mailAddress, name, contact, false)
+			const buttonAttrs = attachDropdown({
+				label: () => getDisplayText(recipientInfo.name, mailAddress, false),
+				type: ButtonType.TextBubble,
+				isSelected: () => false,
+			}, () => this._createBubbleContextButtons(recipientInfo.name, mailAddress))
+			return new Bubble(recipientInfo, buttonAttrs, mailAddress)
+		},
 
+		_createBubbleContextButtons(name: string, mailAddress: string): Array<ButtonAttrs | string> {
+			let buttonAttrs = [mailAddress]
+			buttonAttrs.push({
+				label: "remove_action",
+				type: ButtonType.Secondary,
+				click: () => {
+					findAndRemove(invitePeopleValueTextField.bubbles, (bubble) => bubble.entity.mailAddress === mailAddress)
+				},
+			})
+			return buttonAttrs
+		}
+	}))
+	return invitePeopleValueTextField
+}
+
+const OverlayPage: MComponent<{z?: number}> = {
+	view(vnode) {
+		return m("div.fill-absolute.content-bg", {
+			style: {
+				transform: `translate(100%)`,
+				transition: 'transform 200ms',
+				boxShadow: '0 0 8px 2px lightgray',
+				zIndex: vnode.attrs.z
+			},
+			oncreate(vnode) {
+				this.dom = vnode.dom
+				vnode.dom.style.transform = ''
+			},
+		}, vnode.children)
+	},
+	onbeforeremove(vnode) {
+		// The reason it is organized so strangely is that onbeforeremove is only called before node is detacched from it's parent,
+		// not the document. That's pretty much what we want expect it's never the case for the "div" we render but holds for this
+		// top-level component. So we have to save child dom and manipulate it from here.
+		// Notice how functions here are not arrow functions. "this" will refer to the component state.
+		vnode.dom.style.transform = 'translate(100%)'
+		return Promise.delay(200)
+	}
+}
 
 
 

@@ -32,18 +32,14 @@ declare module 'mithril' {
 	}
 
 	declare interface Mithril {
+		// We would like to write a definition which allows omitting Attrs if all keys are optional
+		(component: string | Component | MComponent<void> | Class<MComponent<void>>, children?: Children): Vnode<any>;
 
-		(selector: string | Component, children?: Children): Vnode<any>;
-
-		(selector: string | Component, attributes: {}, children?: Children): Vnode<any>;
-
-		<Attrs>(component: Class<MComponent<Attrs>>, children?: Children): Vnode<any>;
-
-		<Attrs>(component: Class<MComponent<Attrs>>, attributes: Attrs, children?: Children): Vnode<any>;
-
-		<Attrs>(component: MComponent<Attrs>, children?: Children): Vnode<any>;
-
-		<Attrs>(component: MComponent<Attrs>, attributes: Attrs, children?: Children): Vnode<any>;
+		<Attrs: $ReadOnly<{[?string]: any}>>(
+			component: string | Component | Class<MComponent<Attrs>> | MComponent<Attrs>,
+			attributes: Attrs,
+			children?: Children
+		): Vnode<any>;
 
 		route: Router;
 
