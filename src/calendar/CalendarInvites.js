@@ -1,7 +1,7 @@
 //@flow
 
 import {mailModel} from "../mail/MailModel"
-import {calendarAttendeeStatusDescription, formatEventDuration, getTimeZone} from "./CalendarUtils"
+import {calendarAttendeeStatusSymbol, formatEventDuration, getTimeZone} from "./CalendarUtils"
 import {theme} from "../gui/theme"
 import {stringToUtf8Uint8Array, uint8ArrayToBase64} from "../api/common/utils/Encoding"
 import type {CalendarAttendeeStatusEnum, CalendarMethodEnum} from "../api/common/TutanotaConstants"
@@ -117,7 +117,7 @@ function makeInviteEmailBody(event: CalendarEvent, message: string) {
     ${organizerLine(event)}
     ${event.attendees.map((a) =>
 		"<div style='margin-left: 80px'>" + (a.address.name || "") + " " + a.address.address + " "
-		+ calendarAttendeeStatusDescription(getAttendeeStatus(a)) + "</div>")
+		+ calendarAttendeeStatusSymbol(getAttendeeStatus(a)) + "</div>")
 	       .join("\n")}
   </div>
   <hr style="border: 0; height: 1px; background-color: #ddd">
@@ -132,7 +132,7 @@ function makeResponseEmailBody(event: CalendarEvent, message: string, sender: Ma
   <h2 style="text-align: center">${message}</h2>
   <div style="margin: 0 auto">
   <div style="display: flex">${lang.get("who_label")}:<div style='margin-left: 80px'>${sender.name + " " + sender.address
-	} ${calendarAttendeeStatusDescription(status)}</div></div>
+	} ${calendarAttendeeStatusSymbol(status)}</div></div>
   </div>
   <hr style="border: 0; height: 1px; background-color: #ddd">
   <img style="max-height: 38px; display: block; background-color: white; padding: 4px 8px; border-radius: 4px; margin: 16px auto 0"

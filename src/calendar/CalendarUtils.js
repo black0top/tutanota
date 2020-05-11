@@ -571,16 +571,31 @@ export function formatEventDuration(event: CalendarEvent, zone: string) {
 	}
 }
 
-export function calendarAttendeeStatusDescription(status: CalendarAttendeeStatusEnum): string {
+export function calendarAttendeeStatusSymbol(status: CalendarAttendeeStatusEnum): string {
 	switch (status) {
 		case CalendarAttendeeStatus.NEEDS_ACTION:
-			return "?"
+			return ""
 		case CalendarAttendeeStatus.TENTATIVE:
-			return "✓/❌"
+			return "?"
 		case CalendarAttendeeStatus.ACCEPTED:
 			return "✓"
 		case CalendarAttendeeStatus.DECLINED:
 			return "❌"
+		default:
+			throw new Error("Unknown calendar attendee status: " + status)
+	}
+}
+
+export function calendarAttendeeStatusDescription(status: CalendarAttendeeStatusEnum): string {
+	switch (status) {
+		case CalendarAttendeeStatus.NEEDS_ACTION:
+			return lang.get("awaiting_label")
+		case CalendarAttendeeStatus.TENTATIVE:
+			return lang.get("maybe_label")
+		case CalendarAttendeeStatus.ACCEPTED:
+			return lang.get("yes_label")
+		case CalendarAttendeeStatus.DECLINED:
+			return lang.get("no_label")
 		default:
 			throw new Error("Unknown calendar attendee status: " + status)
 	}

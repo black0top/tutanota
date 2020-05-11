@@ -78,7 +78,7 @@ export class TimePicker implements MComponent<Attrs> {
 				},
 			}),
 			this._focused
-				? m(".fixed.flex.col.mt-s", {
+				? m(".fixed.flex.col.mt-s.menu-shadow", {
 					oncreate: (vnode) => this._setScrollTop(attrs, vnode),
 					onupdate: (vnode) => this._setScrollTop(attrs, vnode),
 					style: {
@@ -87,7 +87,7 @@ export class TimePicker implements MComponent<Attrs> {
 						"z-index": "3",
 						background: theme.content_bg,
 						overflow: "auto",
-						"box-shadow": "0 4px 5px 2px rgba(0,0,0,0.14), 0 4px 5px 2px rgba(0,0,0,0.14), 0 4px 5px 2px rgba(0,0,0,0.14)"
+
 					},
 				}, this._values.map((t, i) => m("pr-s.pl-s.darker-hover", {
 					key: t,

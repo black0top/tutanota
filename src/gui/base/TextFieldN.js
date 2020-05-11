@@ -1,7 +1,7 @@
 //@flow
 import m from "mithril"
 import {px, size} from "../size"
-import {animations, fontSize, transform} from "./../animation/Animations"
+import {animations, fontSize, transform} from "../animation/Animations"
 import {ease} from "../animation/Easing"
 import {theme} from "../theme"
 import type {TranslationKey} from "../../misc/LanguageViewModel"

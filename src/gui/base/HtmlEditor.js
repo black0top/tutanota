@@ -7,6 +7,7 @@ import type {TranslationKey} from "../../misc/LanguageViewModel"
 import {lang} from "../../misc/LanguageViewModel"
 import {px} from "../size"
 import {htmlSanitizer} from "../../misc/HtmlSanitizer"
+import type {Options as ToolbarOptions} from "./RichTextToolbar"
 import {RichTextToolbar} from "./RichTextToolbar"
 
 export const Mode = Object.freeze({
@@ -15,7 +16,7 @@ export const Mode = Object.freeze({
 })
 export type HtmlEditorModeEnum = $Values<typeof Mode>;
 
-type RichToolbarOptions = {|enabled: boolean, imageButtonClickHandler?: (ev: Event, editor: Editor) => mixed|}
+type RichToolbarOptions = {enabled: boolean} & ToolbarOptions
 
 export class HtmlEditor {
 	_editor: Editor;
@@ -103,7 +104,7 @@ export class HtmlEditor {
 		const label = labelIdOrLabelFunction
 
 
-		const toolbar = new RichTextToolbar(this._editor, richToolbarOptions.imageButtonClickHandler)
+		const toolbar = new RichTextToolbar(this._editor, richToolbarOptions)
 
 		this.view = () => {
 			return m(".html-editor", [

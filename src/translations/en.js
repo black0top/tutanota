@@ -1121,5 +1121,6 @@ module.exports = {
 		"viewOrAddEvent_action": "View/Add event",
 		"who_label": "Who",
 		"when_label": "When",
+		"awaiting_label": "Awaiting",
 	}
 }

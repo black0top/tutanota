@@ -3,7 +3,6 @@ import {TextField} from "./TextField"
 import m from "mithril"
 import stream from "mithril/stream/stream.js"
 import {Icons} from "./icons/Icons"
-import {Button} from "./Button"
 import {client} from "../../misc/ClientDetector"
 import {formatDate, formatDateWithMonth, formatMonthWithFullYear, parseDate} from "../../misc/Formatter"
 import {lang} from "../../misc/LanguageViewModel"
@@ -32,19 +31,22 @@ export class DatePicker implements Component {
 	invalidDate: boolean;
 	date: Stream<?Date>;
 	_forceCompact: boolean;
-	_startOfTheWeekOffset: number
+	_startOfTheWeekOffset: number;
+	_showingDropdown: boolean;
 
 	constructor(startOfTheWeekOffset: number, labelTextIdOrTextFunction: string | lazy<string>, nullSelectionTextId: TranslationKey = "emptyString_msg", forceCompact: boolean = false, disabled: boolean = false) {
 		this.date = stream(null)
 		this._forceCompact = forceCompact
 		this._startOfTheWeekOffset = startOfTheWeekOffset
+		this._showingDropdown = false
 
-		let pickerButton = new Button(labelTextIdOrTextFunction, this._showPickerDialog, () => BootIcons.Calendar)
 		let inputDate: ?Date
 
 		this.invalidDate = false
 		this.input = new TextField(labelTextIdOrTextFunction, () => {
-			if (this.invalidDate) {
+			if (this._showingDropdown) {
+				return null
+			} else if (this.invalidDate) {
 				return lang.get("invalidDateFormat_msg", {"{1}": formatDate(new Date())})
 			} else if (this.date() != null) {
 				return formatDateWithMonth(neverNull(inputDate))
@@ -55,7 +57,6 @@ export class DatePicker implements Component {
 		if (disabled) {
 			this.input.setDisabled()
 		}
-		this.input._injectionsRight = () => (forceCompact || client.isMobileDevice()) && !disabled ? [m(pickerButton)] : null
 		this.input.onUpdate(value => {
 			try {
 				if (value.trim().length > 0) {
@@ -81,17 +82,40 @@ export class DatePicker implements Component {
 		})
 	}
 
+	_documentClickListener: ?MouseEventListener;
+
 	view = (vnode: Vnode<void>) => {
 		return m("", [
-			m(this.input),
-			(this._forceCompact || client.isMobileDevice()
-				? null
-				: m(VisualDatePicker, {
+			m("div", {
+				onclick: () => this._showingDropdown = true,
+			}, m(this.input)),
+			this._showingDropdown
+				? m(".fixed.content-bg.z3.menu-shadow.plr", {
+					style: {width: "280px"},
+					onblur: () => this._showingDropdown = false,
+					oncreate: (vnode) => {
+						const listener: MouseEventListener = (e) => {
+							if (!vnode.dom.contains(e.target)) {
+								this._showingDropdown = false
+								m.redraw()
+							}
+						}
+						this._documentClickListener = listener
+						document.addEventListener("click", listener, true)
+					},
+					onremove: (vnode) => {
+						this._documentClickListener && document.removeEventListener("click", this._documentClickListener, true)
+					}
+				}, m(VisualDatePicker, {
 					selectedDate: this.date(),
-					onDateSelected: (newDate) => this.setDate(newDate),
+					onDateSelected: (newDate) => {
+						this.setDate(newDate)
+						this._showingDropdown = false
+					},
 					wide: false,
 					startOfTheWeekOffset: this._startOfTheWeekOffset
 				}))
+				: null
 		])
 	}
 

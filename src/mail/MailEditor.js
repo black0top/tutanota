@@ -266,7 +266,7 @@ export class MailEditor {
 		const attachImageHandler = isApp() ?
 			null
 			: (ev) => this._onAttachImageClicked(ev)
-		this._richTextToolbar = new RichTextToolbar(this._editor, attachImageHandler)
+		this._richTextToolbar = new RichTextToolbar(this._editor, {imageButtonClickHandler: attachImageHandler})
 		if (logins.isInternalUserLoggedIn()) {
 			this.toRecipients.textField._injectionsRight = () => m(ExpanderButtonN, {
 				label: "show_action",

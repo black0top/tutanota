@@ -3,11 +3,11 @@ import {px, size} from "../gui/size"
 import {incrementDate} from "../api/common/utils/DateUtils"
 import stream from "mithril/stream/stream.js"
 import {DatePicker} from "../gui/base/DatePicker"
-import {Dialog, DialogType} from "../gui/base/Dialog"
+import {Dialog} from "../gui/base/Dialog"
 import type {CalendarInfo} from "./CalendarView"
 import {LIMIT_PAST_EVENTS_YEARS} from "./CalendarView"
 import m from "mithril"
-import {TextFieldN, Type} from "../gui/base/TextFieldN"
+import {TextFieldN} from "../gui/base/TextFieldN"
 import {CheckboxN} from "../gui/base/CheckboxN"
 import {lang} from "../misc/LanguageViewModel"
 import type {DropDownSelectorAttrs} from "../gui/base/DropDownSelectorN"
@@ -20,7 +20,7 @@ import {erase, load} from "../api/main/Entity"
 import {clone, downcast, neverNull, noOp} from "../api/common/utils/Utils"
 import type {ButtonAttrs} from "../gui/base/ButtonN"
 import {ButtonN, ButtonType} from "../gui/base/ButtonN"
-import type {AlarmIntervalEnum, EndTypeEnum, RepeatPeriodEnum} from "../api/common/TutanotaConstants"
+import type {AlarmIntervalEnum, CalendarAttendeeStatusEnum, EndTypeEnum, RepeatPeriodEnum} from "../api/common/TutanotaConstants"
 import {
 	AlarmInterval,
 	CalendarAttendeeStatus,
@@ -39,8 +39,8 @@ import {isSameId, listIdPart} from "../api/common/EntityFunctions"
 import {logins} from "../api/main/LoginController"
 import {UserAlarmInfoTypeRef} from "../api/entities/sys/UserAlarmInfo"
 import {
-	assignEventId,
-	calendarAttendeeStatusDescription,
+	assignEventId, calendarAttendeeStatusDescription,
+	calendarAttendeeStatusSymbol,
 	createRepeatRuleWithValues,
 	filterInt,
 	generateUid,
@@ -63,9 +63,9 @@ import {generateEventElementId, isAllDayEvent} from "../api/common/utils/CommonC
 import {worker} from "../api/main/WorkerClient"
 import {NotFoundError} from "../api/common/error/RestError"
 import {TimePicker} from "../gui/base/TimePicker"
-import {windowFacade} from "../misc/WindowFacade"
 import {createRecipientInfo, getDefaultSenderFromUser, getDisplayText, getEnabledMailAddresses} from "../mail/MailUtils"
 import type {MailboxDetail} from "../mail/MailModel"
+import type {CalendarEventAttendee} from "../api/entities/tutanota/CalendarEventAttendee"
 import {createCalendarEventAttendee} from "../api/entities/tutanota/CalendarEventAttendee"
 import {getCleanedMailAddress} from "../misc/Formatter"
 import {createMailAddress} from "../api/entities/tutanota/MailAddress"
@@ -76,7 +76,9 @@ import {Bubble, BubbleTextField} from "../gui/base/BubbleTextField"
 import {MailAddressBubbleHandler} from "../misc/MailAddressBubbleHandler"
 import type {Contact} from "../api/entities/tutanota/Contact"
 import {attachDropdown} from "../gui/base/DropdownN"
-import {DialogHeaderBar} from "../gui/base/DialogHeaderBar"
+import {HtmlEditor} from "../gui/base/HtmlEditor"
+import {Icon} from "../gui/base/Icon"
+import {BootIcons} from "../gui/base/icons/BootIcons"
 
 const TIMESTAMP_ZERO_YEAR = 1970
 
@@ -294,10 +296,6 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		}
 	}
 
-	let windowCloseUnsubscribe
-
-	const attendeesExpanded = stream(false)
-
 	const mailAddresses = getEnabledMailAddresses(mailboxDetail)
 	const attendees = existingEvent && existingEvent.attendees.slice() || []
 	const organizer = stream(existingEvent && existingEvent.organizer || getDefaultSenderFromUser())
@@ -326,7 +324,8 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 	}
 
 	const participationDropdownAttrs = {
-		label: () => "Your decision",
+		// TODO: translate
+		label: () => "Going?",
 		items: [
 			{name: lang.get("noSelection_msg"), value: CalendarAttendeeStatus.NEEDS_ACTION, selectable: false},
 			{name: lang.get("yes_label"), value: CalendarAttendeeStatus.ACCEPTED},
@@ -335,6 +334,11 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		],
 		selectedValue: participationStatus,
 	}
+
+	const descriptionEditor = new HtmlEditor("description_label", {enabled: true, alignmentEnabled: false, fontSizeEnabled: false})
+		.setValue(existingEvent ? existingEvent.description : "")
+		.setMinHeight(100)
+		.showBorders()
 
 	const okAction = (dialog) => {
 		// We have to use existing instance to get all the final fields correctly
@@ -482,134 +486,137 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		})
 	}
 
-	const attendeesField = makeAttendeesField()
+	const attendeesField = makeAttendeesField((bubble) => {
+		const attendee = createCalendarEventAttendee({
+			status: CalendarAttendeeStatus.NEEDS_ACTION,
+			address: createEncryptedMailAddress({
+				address: bubble.entity.mailAddress
+			}),
+		})
+		attendees.push(attendee)
+		remove(attendeesField.bubbles, bubble)
+	})
 
-
-	type Page = {
-		header: () => Children,
-		body: (index: number) => Children,
+	function renderInviting(): Children {
+		return m(attendeesField)
 	}
 
-	const pages: Array<Page> = []
-	const popPage = () => pages.pop()
+	function renderAttendees() {
+		const iconForStatus = {
+			[CalendarAttendeeStatus.ACCEPTED]: Icons.Checkmark,
+			[CalendarAttendeeStatus.TENTATIVE]: BootIcons.Help,
+			[CalendarAttendeeStatus.DECLINED]: Icons.Cancel,
+			[CalendarAttendeeStatus.NEEDS_ACTION]: null
+		}
 
+		function renderStatusIcon(attendee: CalendarEventAttendee): Children {
+			const icon = iconForStatus[attendee.status]
 
-	function renderInviting(index: number): Children {
-		return m(OverlayPage, {z: index}, m(".plr-l", m(attendeesField)))
-	}
+			const iconElement = icon
+				? m(Icon, {icon})
+				: m(".icon", {
+					style: {display: "inline-block"}
+				})
+			const status: CalendarAttendeeStatusEnum = downcast(attendee.status)
+			return m("", {
+				style: {display: "inline-block"},
+				title: calendarAttendeeStatusDescription(status)
+			}, iconElement)
+		}
 
-	function renderAttendees(index: number): Children {
-		return m(OverlayPage, {z: index}, m(".plr-l", [
-				m(".flex-end", m(ButtonN, {
-					label: () => "Add attendees",
-					click: () => pages.push(invitingPage),
-					type: ButtonType.Secondary,
-				})),
-				attendees.map(a => m(".flex", [
-					m(".flex-grow", {
-							style: {
-								height: px(size.button_height),
-								"lineHeight": px(size.button_height),
-							},
+		return m(".pt", [
+			attendees.map(a => m(".flex.mr-negative-s", [
+				m(".flex-grow", {
+						style: {
+							height: px(size.button_height),
+							"lineHeight": px(size.button_height),
 						},
-						`${calendarAttendeeStatusDescription(getAttendeeStatus(a))} ${a.address.name || ""} ${a.address.address}`),
-					isOwnEvent
-						? m(ButtonN, {
-							label: "delete_action",
-							type: ButtonType.Action,
-							icon: () => Icons.Cancel,
-							click: () => {
-								remove(attendees, a)
-							}
-						})
-						: null
-				]))
-			])
-		)
-	}
-
-	const attendeesPage = {
-		header: () => m(DialogHeaderBar, {
-			left: [{label: "back_action", click: popPage, type: ButtonType.Secondary}],
-			right: [],
-			middle: () => lang.get("attendees_label"),
-		}),
-		body: renderAttendees
-	}
-	const invitingPage = {
-		header: () => m(DialogHeaderBar, {
-			left: [{label: "back_action", click: popPage, type: ButtonType.Secondary}],
-			right: [
-				{
-					label: "add_action",
-					click: () => {
-						attendeesField.bubbles.forEach((bubble) => {
-							const newAttendee = createCalendarEventAttendee({
-								address: createEncryptedMailAddress({
-									address: bubble.entity.mailAddress,
-									name: bubble.entity.name,
-								})
-							})
-							attendeesField.bubbles.length = 0
-							attendees.push(newAttendee)
-						})
-						popPage()
 					},
-					type: ButtonType.Primary,
-				},
-			],
-			middle: () => "Invite",
-		}),
-		body: renderInviting
+					[renderStatusIcon(a), `${a.address.name || ""} ${a.address.address}`]
+				),
+				isOwnEvent
+					? m(ButtonN, {
+						label: "delete_action",
+						type: ButtonType.Action,
+						icon: () => Icons.Cancel,
+						click: () => {
+							remove(attendees, a)
+						}
+					})
+					: null
+			]))
+		])
 	}
 
+	function deleteEvent() {
+		if (existingEvent == null) {
+			return
+		}
+		let p = existingEvent.repeatRule
+			? Dialog.confirm("deleteRepeatingEventConfirmation_msg")
+			: Promise.resolve(true)
+		p.then((answer) => {
+			if (answer) {
+				if (isOwnEvent && existingEvent.attendees.length) {
+					sendCalendarCancellation(existingEvent, existingEvent.attendees.map(a => a.address))
+				}
+				erase(existingEvent).catch(NotFoundError, noOp)
+				dialog.close()
+			}
+		})
+	}
 
-	function attendeesClicked() {
-		pages.push(attendees.length === 0 ? invitingPage : attendeesPage)
+	function renderOrganizer(): Children {
+		return isOwnEvent
+			? m(DropDownSelectorN, {
+				label: "organizer_label",
+				items: mailAddresses
+					.map(mailAddress => ({
+						name: mailAddress,
+						value: mailAddress
+					})),
+				selectedValue: organizer,
+			})
+			: m(".col.mt", [
+				m(".small", lang.get("organizer_label")),
+				m("", organizer())
+			])
 	}
 
 	function renderEditing() {
-		return m(".calendar-edit-container.scroll.plr-l.pb", {
-			style: {
-				transition: "opacity 200ms",
-				// opacity: state === "editing" ? 1 : 0,
-			}
-		}, [
-			m(TextFieldN, {
-				label: "title_placeholder",
-				value: summary,
-				disabled: readOnly
-			}),
+		return [
 			m(".flex", [
-				m(".flex-grow.mr-s", m(startDatePicker)),
-				!allDay()
-					? m(".time-field", m(TimePicker, {
-						value: startTime,
-						onselected: onStartTimeSelected,
-						amPmFormat: amPmFormat,
-						disabled: readOnly
-					}))
-					: null
+				m(".flex.mr-m", [
+					m(".mr-s", m(startDatePicker)),
+					!allDay()
+						? m(".time-field", m(TimePicker, {
+							value: startTime,
+							onselected: onStartTimeSelected,
+							amPmFormat: amPmFormat,
+							disabled: readOnly
+						}))
+						: null
+				]),
+				m(".flex", [
+					m(".mr-s", m(endDatePicker)),
+					!allDay()
+						? m(".time-field", m(TimePicker, {
+							value: endTime,
+							onselected: endTime,
+							amPmFormat: amPmFormat,
+							disabled: readOnly
+						}))
+						: null
+				]),
 			]),
-			m(".flex", [
-				m(".flex-grow.mr-s", m(endDatePicker)),
-				!allDay()
-					? m(".time-field", m(TimePicker, {
-						value: endTime,
-						onselected: endTime,
-						amPmFormat: amPmFormat,
-						disabled: readOnly
-					}))
-					: null
-			]),
-			m(CheckboxN, {
+			m(".mt-s", m(CheckboxN, {
 				checked: allDay,
 				disabled: readOnly,
 				label: () => lang.get("allDay_label")
-			}),
+			})),
 			eventTooOld
 				? null
-				: [
+				: m(".max-width-s", [
 					m(".flex", [
 						m(".flex-grow", m(DropDownSelectorN, repeatPickerAttrs)),
 						m(".flex-grow.ml-s"
@@ -621,7 +628,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 							m(".flex-grow.ml-s", renderStopConditionValue()),
 						])
 						: null
-				],
+				]),
 			readOnly ? null : m(".flex.col.mt.mb", alarmPickerAttrs.map((attrs) => m(DropDownSelectorN, attrs))),
 			m(DropDownSelectorN, ({
 				label: "calendar_label",
@@ -638,7 +645,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 				disabled: readOnly,
 				injectionsRight: () => {
 					let address = encodeURIComponent(locationValue())
-					if (address == "") {
+					if (address === "") {
 						return null;
 					}
 					return m(ButtonN, {
@@ -650,85 +657,51 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 					})
 				}
 			}),
-			m(TextFieldN, {
-				label: "description_label",
-				value: notesValue,
-				type: Type.Area,
-				disabled: readOnly
-			}),
-			isOwnEvent
-				? m(DropDownSelectorN, {
-					label: "organizer_label",
-					items: mailAddresses
-						.map(mailAddress => ({
-							name: mailAddress,
-							value: mailAddress
-						})),
-					selectedValue: organizer,
-				})
-				: m(".col.mt", [
-					m(".small", lang.get("organizer_label")),
-					m("", organizer())
-				]),
-			[
-				m(TextFieldN, {
-					label: "attendees_label",
-					value: stream(String(attendees.length)),
-					disabled: true,
-					injectionsRight: () => m(ButtonN, {
-						label: "attendees_label",
-						type: ButtonType.Action,
-						icon: () => Icons.ArrowForward,
-						click: attendeesClicked,
-					}),
-				}),
-			],
-			!isOwnEvent
-				? m(DropDownSelectorN, participationDropdownAttrs)
+			m(descriptionEditor),
+			existingEvent && existingEvent._id && !readOnly
+				? m(".mr-negative-s.float-right.flex-end-on-child", m(ButtonN, {
+					label: "delete_action",
+					type: ButtonType.Primary,
+					click: () => deleteEvent()
+				}))
 				: null,
-			existingEvent && existingEvent._id && !readOnly ? m(".mr-negative-s.float-right.flex-end-on-child", m(ButtonN, {
-				label: "delete_action",
-				type: ButtonType.Primary,
-				click: () => {
-					let p = neverNull(existingEvent).repeatRule
-						? Dialog.confirm("deleteRepeatingEventConfirmation_msg")
-						: Promise.resolve(true)
-					p.then((answer) => {
-						if (answer) {
-							if (isOwnEvent && existingEvent.attendees.length) {
-								sendCalendarCancellation(existingEvent, existingEvent.attendees.map(a => a.address))
-							}
-							erase(existingEvent).catch(NotFoundError, noOp)
-							dialog.close()
-						}
-					})
-				}
-			})) : null,
+		]
+	}
+
+	function renderDecision() {
+		return m(DropDownSelectorN, participationDropdownAttrs)
+	}
+
+	function renderDialogContent() {
+		return m(".calendar-edit-container.pb", [
+			m(TextFieldN, {
+				label: "title_placeholder",
+				value: summary,
+				disabled: readOnly,
+				class: "h4 pt"
+			}),
+			m(".flex", [
+				m("div.mr-m", {
+					style: {flex: "0 0 400px"},
+				}, renderEditing()),
+				m(".flex-grow", [
+					renderDecision(),
+					renderInviting(),
+					renderAttendees(),
+					renderOrganizer()
+				])
+			])
 		])
 	}
 
-	const editingPage = {
-		header: () => m(DialogHeaderBar, {
+	const dialog = Dialog.largeDialog(
+		{
 			left: [{label: "cancel_action", click: () => dialog.close(), type: ButtonType.Secondary}],
 			right: [{label: "ok_action", click: () => okAction(dialog), type: ButtonType.Primary}],
 			middle: () => lang.get("createEvent_label"),
-		}),
-		body: renderEditing,
-	}
-
-	pages.push(editingPage)
-
-	const dialog = new Dialog(DialogType.EditSmall, {
-		view: () => [
-			m(".dialog-header.plr-l", lastThrow(pages).header()),
-			m(".dialog-max-height.text-break.rel",
-				{
-					oncreate: () => windowCloseUnsubscribe = windowFacade.addWindowCloseListener(() => {}),
-					onremove: () => windowCloseUnsubscribe()
-				}, pages.map((p, i) => p.body(i))
-			)
-		]
-	})
+		},
+		{view: renderDialogContent}
+	)
 	dialog.show()
 }
 
@@ -798,7 +771,19 @@ export function createEndCountPicker(): DropDownSelectorAttrs<number> {
 	}
 }
 
-function makeAttendeesField(): BubbleTextField<RecipientInfo> {
+function makeAttendeesField(onBubbleCreated: (Bubble<RecipientInfo>) => void): BubbleTextField<RecipientInfo> {
+	function createBubbleContextButtons(name: string, mailAddress: string): Array<ButtonAttrs | string> {
+		let buttonAttrs = [mailAddress]
+		buttonAttrs.push({
+			label: "remove_action",
+			type: ButtonType.Secondary,
+			click: () => {
+				findAndRemove(invitePeopleValueTextField.bubbles, (bubble) => bubble.entity.mailAddress === mailAddress)
+			},
+		})
+		return buttonAttrs
+	}
+
 	const invitePeopleValueTextField = new BubbleTextField("shareWithEmailRecipient_label", new MailAddressBubbleHandler({
 		createBubble(name: ?string, mailAddress: string, contact: ?Contact): Bubble<RecipientInfo> {
 			const recipientInfo = createRecipientInfo(mailAddress, name, contact, false)
@@ -806,21 +791,12 @@ function makeAttendeesField(): BubbleTextField<RecipientInfo> {
 				label: () => getDisplayText(recipientInfo.name, mailAddress, false),
 				type: ButtonType.TextBubble,
 				isSelected: () => false,
-			}, () => this._createBubbleContextButtons(recipientInfo.name, mailAddress))
-			return new Bubble(recipientInfo, buttonAttrs, mailAddress)
+			}, () => createBubbleContextButtons(recipientInfo.name, mailAddress))
+			const bubble = new Bubble(recipientInfo, buttonAttrs, mailAddress)
+			Promise.resolve().then(() => onBubbleCreated(bubble))
+			return bubble
 		},
 
-		_createBubbleContextButtons(name: string, mailAddress: string): Array<ButtonAttrs | string> {
-			let buttonAttrs = [mailAddress]
-			buttonAttrs.push({
-				label: "remove_action",
-				type: ButtonType.Secondary,
-				click: () => {
-					findAndRemove(invitePeopleValueTextField.bubbles, (bubble) => bubble.entity.mailAddress === mailAddress)
-				},
-			})
-			return buttonAttrs
-		}
 	}))
 	return invitePeopleValueTextField
 }

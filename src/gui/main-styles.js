@@ -1240,6 +1240,9 @@ styles.registerStyle('main', () => {
 			left: 'auto',
 			width: `${px(size.navbar_edge_width_mobile)}`
 		},
+		'.menu-shadow': {
+			"box-shadow": "0 4px 5px 2px rgba(0,0,0,0.14), 0 4px 5px 2px rgba(0,0,0,0.14), 0 4px 5px 2px rgba(0,0,0,0.14)",
+		},
 
 		// media query for mobile devices, should be one pixel less than style.isDesktopLayout
 		[`@media (max-width: ${size.desktop_layout_width - 1}px)`]: {
