@@ -3,12 +3,13 @@ import m from "mithril"
 import stream from "mithril/stream/stream.js"
 import {assertMainOrNode} from "../../api/Env"
 import {TextFieldN} from "./TextFieldN"
-import {ButtonN, ButtonType} from "./ButtonN"
+import {ButtonColors, ButtonN, ButtonType} from "./ButtonN"
 import {createDropdown} from "./DropdownN.js"
-import {Icons} from "./icons/Icons"
 import type {AllIconsEnum} from "./Icon"
 import {lazyStringValue} from "../../api/common/utils/StringUtils"
 import type {TranslationKey} from "../../misc/LanguageViewModel"
+import {BootIcons} from "./icons/BootIcons"
+import {noOp} from "../../api/common/utils/Utils"
 
 assertMainOrNode()
 
@@ -36,12 +37,15 @@ export class DropDownSelectorN<T> implements MComponent<DropDownSelectorAttrs<T>
 			value: stream(this.valueToText(a, a.selectedValue()) || ""),
 			helpLabel: a.helpLabel,
 			disabled: true,
+			onclick: a.disabled ? noOp : this.createDropdown(a),
+			class: "click pt",
 			injectionsRight: () => a.disabled
 				? null
 				: m(ButtonN, {
 					label: a.label,
-					icon: () => a.icon ? a.icon : Icons.Edit,
-					click: this.createDropdown(a),
+					icon: () => a.icon ? a.icon : BootIcons.Expand,
+					click: noOp,
+					colors: ButtonColors.DrawerNav
 				})
 		})
 	}
