@@ -25,6 +25,7 @@ import {DropDownSelectorN} from "./DropDownSelectorN"
 import {showProgressDialog} from "./ProgressDialog"
 import {Keys} from "../../api/common/TutanotaConstants"
 import {dialogAttrs} from "../../api/common/utils/AriaUtils"
+import {styles} from "../styles"
 
 assertMainOrNode()
 
@@ -92,9 +93,9 @@ export class Dialog {
 				m(".flex.justify-center.align-self-stretch.rel.overflow-hidden"
 					+ (dialogType === DialogType.EditLarge ? ".flex-grow" : ".transition-margin"), {  // controls horizontal alignment
 						style: {
-							'margin-top': mobileMargin,
-							'margin-left': mobileMargin,
-							'margin-right': mobileMargin,
+							'margin-top': styles.isDesktopLayout() || dialogType !== DialogType.EditLarge ? px(size.hpad) : 0,
+							marginLeft: dialogType !== DialogType.EditLarge ? px(size.hpad) : 0,
+							marginRight: dialogType !== DialogType.EditLarge ? px(size.hpad) : 0,
 							'margin-bottom': (Dialog._keyboardHeight > 0)
 								? px(Dialog._keyboardHeight)
 								: dialogType === DialogType.EditLarge ? 0 : mobileMargin,
