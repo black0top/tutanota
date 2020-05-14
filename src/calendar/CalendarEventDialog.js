@@ -8,7 +8,6 @@ import type {CalendarInfo} from "./CalendarView"
 import {LIMIT_PAST_EVENTS_YEARS} from "./CalendarView"
 import m from "mithril"
 import {TextFieldN} from "../gui/base/TextFieldN"
-import {CheckboxN} from "../gui/base/CheckboxN"
 import {lang} from "../misc/LanguageViewModel"
 import type {DropDownSelectorAttrs} from "../gui/base/DropDownSelectorN"
 import {DropDownSelectorN} from "../gui/base/DropDownSelectorN"
@@ -39,8 +38,8 @@ import {isSameId, listIdPart} from "../api/common/EntityFunctions"
 import {logins} from "../api/main/LoginController"
 import {UserAlarmInfoTypeRef} from "../api/entities/sys/UserAlarmInfo"
 import {
-	assignEventId, calendarAttendeeStatusDescription,
-	calendarAttendeeStatusSymbol,
+	assignEventId,
+	calendarAttendeeStatusDescription,
 	createRepeatRuleWithValues,
 	filterInt,
 	generateUid,
@@ -67,7 +66,6 @@ import {createRecipientInfo, getDefaultSenderFromUser, getDisplayText, getEnable
 import type {MailboxDetail} from "../mail/MailModel"
 import type {CalendarEventAttendee} from "../api/entities/tutanota/CalendarEventAttendee"
 import {createCalendarEventAttendee} from "../api/entities/tutanota/CalendarEventAttendee"
-import {getCleanedMailAddress} from "../misc/Formatter"
 import {createMailAddress} from "../api/entities/tutanota/MailAddress"
 import {sendCalendarCancellation, sendCalendarInvite, sendCalendarInviteResponse, sendCalendarUpdate} from "./CalendarInvites"
 import type {CalendarRepeatRule} from "../api/entities/tutanota/CalendarRepeatRule"
@@ -79,6 +77,8 @@ import {attachDropdown} from "../gui/base/DropdownN"
 import {HtmlEditor} from "../gui/base/HtmlEditor"
 import {Icon} from "../gui/base/Icon"
 import {BootIcons} from "../gui/base/icons/BootIcons"
+import {CheckboxN} from "../gui/base/CheckboxN"
+import {ExpanderButtonN, ExpanderPanelN} from "../gui/base/ExpanderN"
 
 const TIMESTAMP_ZERO_YEAR = 1970
 
@@ -151,7 +151,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 			label: () => lang.get("reminderBeforeEvent_label"),
 			items: alarmIntervalItems,
 			selectedValue,
-			icon: Icons.Edit
+			icon: BootIcons.Expand,
 		}
 		selectedValue.map((v) => {
 			const lastAttrs = last(alarmPickerAttrs)
@@ -300,27 +300,14 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 	const attendees = existingEvent && existingEvent.attendees.slice() || []
 	const organizer = stream(existingEvent && existingEvent.organizer || getDefaultSenderFromUser())
 	const isOwnEvent = mailAddresses.includes(organizer())
-	const inviteFieldValue = stream("")
 
-	const participationStatus = stream()
+	const participationStatus = stream(CalendarAttendeeStatus.NEEDS_ACTION)
 	let ownAttendee
 	if (existingEvent && !isOwnEvent) {
 		ownAttendee = attendees.find(a => mailAddresses.includes(a.address.address))
 		participationStatus(ownAttendee ? getAttendeeStatus(ownAttendee) : CalendarAttendeeStatus.NEEDS_ACTION)
 	} else {
 		ownAttendee = null
-	}
-
-
-	function addAttendee() {
-		const address = getCleanedMailAddress(inviteFieldValue())
-		if (address) {
-			attendees.push(createCalendarEventAttendee({
-				address: createEncryptedMailAddress({address}),
-				status: CalendarAttendeeStatus.NEEDS_ACTION,
-			}))
-			inviteFieldValue("")
-		}
 	}
 
 	const participationDropdownAttrs = {
@@ -335,10 +322,21 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		selectedValue: participationStatus,
 	}
 
-	const descriptionEditor = new HtmlEditor("description_label", {enabled: true, alignmentEnabled: false, fontSizeEnabled: false})
+	const editorOptions = {enabled: false, alignmentEnabled: false, fontSizeEnabled: false}
+	const descriptionEditor = new HtmlEditor("description_label", editorOptions, () => m(ButtonN, {
+			label: "emptyString_msg",
+			title: 'showRichTextToolbar_action',
+			icon: () => Icons.FontSize,
+			click: () => editorOptions.enabled = !editorOptions.enabled,
+			isSelected: () => editorOptions.enabled,
+			noBubble: true,
+			type: ButtonType.Toggle,
+		})
+	)
 		.setValue(existingEvent ? existingEvent.description : "")
-		.setMinHeight(100)
+		.setMinHeight(400)
 		.showBorders()
+		.setEnabled(!readOnly)
 
 	const okAction = (dialog) => {
 		// We have to use existing instance to get all the final fields correctly
@@ -464,25 +462,32 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 				|| !_repeatRulesEqual(newEvent.repeatRule, existingEvent.repeatRule)) {
 				// if values of the existing events have changed that influence the alarm time then delete the old event and create a new one.
 				assignEventId(newEvent, zone, groupRoot)
+				// Reset ownerEncSessionKey because it cannot be set for new entity, it will be assigned by the CryptoFacade
+				newEvent._ownerEncSessionKey = null
+				// Reset permissions because server will assign them
+				downcast(newEvent)._permissions = null
 				updatePromise = worker.createCalendarEvent(newEvent, newAlarms, existingEvent)
 			} else {
 				updatePromise = worker.updateCalendarEvent(newEvent, newAlarms, existingEvent)
 			}
 			dialog.close()
-			return updatePromise.then(() => {
-				if (newAttendees.length) {
-					sendCalendarInvite(newEvent, newAlarms, newAttendees.map(a => a.address))
-				}
-				if (shouldSendOutUpdates) {
-					sendCalendarUpdate(newEvent, existingAttendees.map(a => a.address))
-				}
-				if (existingEvent) {
-					const removedAttendees = existingEvent.attendees.filter(att => !attendees.includes(att))
-					if (removedAttendees.length > 0) {
-						sendCalendarCancellation(existingEvent, removedAttendees.map(a => a.address))
+			return updatePromise
+				// Let the dialog close first to avoid glitches
+				.delay(200)
+				.then(() => {
+					if (newAttendees.length) {
+						sendCalendarInvite(newEvent, newAlarms, newAttendees.map(a => a.address))
 					}
-				}
-			})
+					if (shouldSendOutUpdates) {
+						sendCalendarUpdate(newEvent, existingAttendees.map(a => a.address))
+					}
+					if (existingEvent) {
+						const removedAttendees = existingEvent.attendees.filter(att => !attendees.includes(att))
+						if (removedAttendees.length > 0) {
+							sendCalendarCancellation(existingEvent, removedAttendees.map(a => a.address))
+						}
+					}
+				})
 		})
 	}
 
@@ -497,8 +502,10 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		remove(attendeesField.bubbles, bubble)
 	})
 
+	const attendeesExpanded = stream(false)
+
 	function renderInviting(): Children {
-		return m(attendeesField)
+		return !isOwnEvent ? null : m(attendeesField)
 	}
 
 	function renderAttendees() {
@@ -524,7 +531,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 			}, iconElement)
 		}
 
-		return m(".pt", [
+		return m(".pt-s", [
 			attendees.map(a => m(".flex.mr-negative-s", [
 				m(".flex-grow", {
 						style: {
@@ -567,27 +574,24 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 	}
 
 	function renderOrganizer(): Children {
-		return isOwnEvent
-			? m(DropDownSelectorN, {
-				label: "organizer_label",
-				items: mailAddresses
-					.map(mailAddress => ({
-						name: mailAddress,
-						value: mailAddress
-					})),
-				selectedValue: organizer,
-			})
-			: m(".col.mt", [
-				m(".small", lang.get("organizer_label")),
-				m("", organizer())
-			])
+		return m(DropDownSelectorN, {
+			label: "organizer_label",
+			items: mailAddresses
+				.map(mailAddress => ({
+					name: mailAddress,
+					value: mailAddress
+				})),
+			selectedValue: organizer,
+			dropdownWidth: 300,
+			disabled: !isOwnEvent
+		})
 	}
 
 	function renderEditing() {
 		return [
 			m(".flex", [
-				m(".flex.mr-m", [
-					m(".mr-s", m(startDatePicker)),
+				m(".flex.flex-half.pr-m", [
+					m(".mr-s.flex-grow", m(startDatePicker)),
 					!allDay()
 						? m(".time-field", m(TimePicker, {
 							value: startTime,
@@ -597,8 +601,8 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 						}))
 						: null
 				]),
-				m(".flex", [
-					m(".mr-s", m(endDatePicker)),
+				m(".flex.flex-half", [
+					m(".mr-s.flex-grow", m(endDatePicker)),
 					!allDay()
 						? m(".time-field", m(TimePicker, {
 							value: endTime,
@@ -609,36 +613,58 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 						: null
 				]),
 			]),
-			m(".mt-s", m(CheckboxN, {
-				checked: allDay,
-				disabled: readOnly,
-				label: () => lang.get("allDay_label")
-			})),
+			m(".flex", [
+				m(".mt-s", m(CheckboxN, {
+					checked: allDay,
+					disabled: readOnly,
+					label: () => lang.get("allDay_label")
+				})),
+				m(".flex-grow"),
+				m(ExpanderButtonN, {
+					label: "attendees_label",
+					expanded: attendeesExpanded,
+				})
+			]),
+			m(ExpanderPanelN, {
+				expanded: attendeesExpanded,
+			}, m(".flex", [
+				m(".flex.col.flex-half.pr-m", [
+					renderInviting(),
+					renderAttendees()
+				]),
+				m(".flex.col.flex-half", [
+					renderDecision(),
+					renderOrganizer(),
+				])
+			])),
 			eventTooOld
 				? null
-				: m(".max-width-s", [
-					m(".flex", [
+				: m(".flex.mt-s", [
+					// Padding big enough so that end date condition bottom label doesn't push content around
+					m(".flex.flex-nogrow-shrink-half.pr-s.pb-ml", [
 						m(".flex-grow", m(DropDownSelectorN, repeatPickerAttrs)),
 						m(".flex-grow.ml-s"
 							+ (repeatPickerAttrs.selectedValue() ? "" : ".hidden"), m(DropDownSelectorN, repeatIntervalPickerAttrs)),
 					]),
 					repeatPickerAttrs.selectedValue()
-						? m(".flex", [
+						? m(".flex.flex-nogrow-shrink-half.pl-s", [
 							m(".flex-grow", m(DropDownSelectorN, endTypePickerAttrs)),
 							m(".flex-grow.ml-s", renderStopConditionValue()),
 						])
 						: null
 				]),
-			readOnly ? null : m(".flex.col.mt.mb", alarmPickerAttrs.map((attrs) => m(DropDownSelectorN, attrs))),
-			m(DropDownSelectorN, ({
-				label: "calendar_label",
-				items: calendarArray.map((calendarInfo) => {
-					return {name: getCalendarName(calendarInfo.groupInfo, calendarInfo.shared), value: calendarInfo}
-				}),
-				selectedValue: selectedCalendar,
-				icon: Icons.Edit,
-				disabled: readOnly
-			}: DropDownSelectorAttrs<CalendarInfo>)),
+			m(".flex", [
+				readOnly ? null : m(".flex.col.flex-half.pr-m", alarmPickerAttrs.map((attrs) => m(DropDownSelectorN, attrs))),
+				m(".flex-half", m(DropDownSelectorN, ({
+					label: "calendar_label",
+					items: calendarArray.map((calendarInfo) => {
+						return {name: getCalendarName(calendarInfo.groupInfo, calendarInfo.shared), value: calendarInfo}
+					}),
+					selectedValue: selectedCalendar,
+					icon: BootIcons.Expand,
+					disabled: readOnly
+				}: DropDownSelectorAttrs<CalendarInfo>))),
+			]),
 			m(TextFieldN, {
 				label: "location_label",
 				value: locationValue,
@@ -657,14 +683,6 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 					})
 				}
 			}),
-			m(descriptionEditor),
-			existingEvent && existingEvent._id && !readOnly
-				? m(".mr-negative-s.float-right.flex-end-on-child", m(ButtonN, {
-					label: "delete_action",
-					type: ButtonType.Primary,
-					click: () => deleteEvent()
-				}))
-				: null,
 		]
 	}
 
@@ -678,19 +696,17 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 				label: "title_placeholder",
 				value: summary,
 				disabled: readOnly,
-				class: "h4 pt"
+				class: "big-input pt"
 			}),
-			m(".flex", [
-				m("div.mr-m", {
-					style: {flex: "0 0 400px"},
-				}, renderEditing()),
-				m(".flex-grow", [
-					renderDecision(),
-					renderInviting(),
-					renderAttendees(),
-					renderOrganizer()
-				])
-			])
+			renderEditing(),
+			m(descriptionEditor),
+			existingEvent && existingEvent._id && !readOnly
+				? m(".mr-negative-s.float-right.flex-end-on-child", m(ButtonN, {
+					label: "delete_action",
+					type: ButtonType.Primary,
+					click: () => deleteEvent()
+				}))
+				: null,
 		])
 	}
 
@@ -726,7 +742,7 @@ function createRepeatingDatePicker(disabled: boolean): DropDownSelectorAttrs<?Re
 		label: "calendarRepeating_label",
 		items: repeatValues,
 		selectedValue: stream(repeatValues[0].value),
-		icon: Icons.Edit,
+		icon: BootIcons.Expand,
 		disabled
 	}
 }
@@ -741,7 +757,7 @@ function createIntervalPicker(disabled: boolean): DropDownSelectorAttrs<number> 
 		label: "interval_title",
 		items: intervalValues,
 		selectedValue: stream(intervalValues[0].value),
-		icon: Icons.Edit,
+		icon: BootIcons.Expand,
 		disabled
 	}
 }
@@ -757,7 +773,7 @@ function createEndTypePicker(disabled: boolean): DropDownSelectorAttrs<EndTypeEn
 		label: () => lang.get("calendarRepeatStopCondition_label"),
 		items: stopConditionValues,
 		selectedValue: stream(stopConditionValues[0].value),
-		icon: Icons.Edit,
+		icon: BootIcons.Expand,
 		disabled
 	}
 }
@@ -767,7 +783,7 @@ export function createEndCountPicker(): DropDownSelectorAttrs<number> {
 		label: "emptyString_msg",
 		items: intervalValues,
 		selectedValue: stream(intervalValues[0].value),
-		icon: Icons.Edit,
+		icon: BootIcons.Expand,
 	}
 }
 
@@ -800,31 +816,3 @@ function makeAttendeesField(onBubbleCreated: (Bubble<RecipientInfo>) => void): B
 	}))
 	return invitePeopleValueTextField
 }
-
-const OverlayPage: MComponent<{z?: number}> = {
-	view(vnode) {
-		return m("div.fill-absolute.content-bg", {
-			style: {
-				transform: `translate(100%)`,
-				transition: 'transform 200ms',
-				boxShadow: '0 0 8px 2px lightgray',
-				zIndex: vnode.attrs.z
-			},
-			oncreate(vnode) {
-				this.dom = vnode.dom
-				vnode.dom.style.transform = ''
-			},
-		}, vnode.children)
-	},
-	onbeforeremove(vnode) {
-		// The reason it is organized so strangely is that onbeforeremove is only called before node is detacched from it's parent,
-		// not the document. That's pretty much what we want expect it's never the case for the "div" we render but holds for this
-		// top-level component. So we have to save child dom and manipulate it from here.
-		// Notice how functions here are not arrow functions. "this" will refer to the component state.
-		vnode.dom.style.transform = 'translate(100%)'
-		return Promise.delay(200)
-	}
-}
-
-
-

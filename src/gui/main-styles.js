@@ -378,6 +378,7 @@ styles.registerStyle('main', () => {
 		'.flex-third-middle': {flex: '2 1 0'}, // take up more space for the middle column
 		'.flex-half': {flex: '0 0 50%'}, // splits a flex layout into two same width columns
 		'.flex-grow-shrink-half': {flex: '1 1 50%'},
+		'.flex-nogrow-shrink-half': {flex: '0 1 50%'},
 		'.flex-grow-shrink-auto': {flex: "1 1 auto"}, // allow element to grow and shrink using the elements width as default size.
 		'.flex-grow-shrink-150': {flex: "1 1 150px"},
 		'.flex-no-shrink': {flex: "1 0 0"},
@@ -1152,6 +1153,9 @@ styles.registerStyle('main', () => {
 		'.block-list li': {
 			display: 'block',
 		},
+		'.sticky': {
+			position: 'sticky'
+		},
 
 
 		// media query for small devices where elements should be arranged in one column
@@ -1242,6 +1246,10 @@ styles.registerStyle('main', () => {
 		},
 		'.menu-shadow': {
 			"box-shadow": "0 4px 5px 2px rgba(0,0,0,0.14), 0 4px 5px 2px rgba(0,0,0,0.14), 0 4px 5px 2px rgba(0,0,0,0.14)",
+		},
+		'.big-input input': {
+			'font-size': px(size.font_size_base * 1.4),
+			'line-height': `${px(size.font_size_base * 1.4 + 2)} !important`,
 		},
 
 		// media query for mobile devices, should be one pixel less than style.isDesktopLayout

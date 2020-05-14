@@ -60,7 +60,7 @@ export class CalendarFacade {
 		this._entityRestCache = entityRestCache
 	}
 
-	createCalendarEvent(event: CalendarEvent, alarmInfos: Array<AlarmInfo>, zone: string, oldEvent: ?CalendarEvent): Promise<void> {
+	createCalendarEvent(event: CalendarEvent, alarmInfos: Array<AlarmInfo>, oldEvent: ?CalendarEvent): Promise<void> {
 		const user = this._loginFacade.getLoggedInUser()
 		return Promise
 			.resolve()

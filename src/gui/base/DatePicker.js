@@ -33,12 +33,14 @@ export class DatePicker implements Component {
 	_forceCompact: boolean;
 	_startOfTheWeekOffset: number;
 	_showingDropdown: boolean;
+	_disabled: boolean;
 
 	constructor(startOfTheWeekOffset: number, labelTextIdOrTextFunction: string | lazy<string>, nullSelectionTextId: TranslationKey = "emptyString_msg", forceCompact: boolean = false, disabled: boolean = false) {
 		this.date = stream(null)
 		this._forceCompact = forceCompact
 		this._startOfTheWeekOffset = startOfTheWeekOffset
 		this._showingDropdown = false
+		this._disabled = disabled
 
 		let inputDate: ?Date
 
@@ -87,7 +89,11 @@ export class DatePicker implements Component {
 	view = (vnode: Vnode<void>) => {
 		return m("", [
 			m("div", {
-				onclick: () => this._showingDropdown = true,
+				onclick: () => {
+					if (!this._disabled) {
+						this._showingDropdown = true
+					}
+				},
 			}, m(this.input)),
 			this._showingDropdown
 				? m(".fixed.content-bg.z3.menu-shadow.plr", {

@@ -191,8 +191,7 @@ export class RichTextToolbar {
 							: "sticky" // normal browsers
 					}
 				}, [
-					m(".flex-end.wrap", allButtonAttrs.map((t) => m(ButtonN, t))),
-					m("hr.hr")
+					m(".flex-end.wrap", allButtonAttrs.map((t) => m(ButtonN, t)))
 				]
 			)
 		}

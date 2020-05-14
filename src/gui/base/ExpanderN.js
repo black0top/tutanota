@@ -75,16 +75,18 @@ export class ExpanderPanelN implements MComponent<ExpanderPanelAttrs> {
 	_domPanel: HTMLElement;
 
 	view(vnode: Vnode<ExpanderPanelAttrs>) {
-		return m(".expander-panel" + (vnode.attrs.expanded() ? "" : ".overflow-hidden"), [
-			vnode.attrs.expanded() ? m("div", {
-				oncreate: vnode => {
-					this._domPanel = vnode.dom
-					vnode.dom.style.height = 0
-					this._animate(true)
-				},
-				onbeforeremove: vnode => this._animate(false),
-				class: vnode.attrs.class
-			}, vnode.children) : null
+		return m(".expander-panel.overflow-hidden", [
+			vnode.attrs.expanded()
+				? m("div", {
+					oncreate: vnode => {
+						this._domPanel = vnode.dom
+						vnode.dom.style.height = 0
+						this._animate(true)
+					},
+					onbeforeremove: vnode => this._animate(false),
+					class: vnode.attrs.class
+				}, vnode.children)
+				: null
 		])
 	}
 

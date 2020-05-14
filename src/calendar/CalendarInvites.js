@@ -66,7 +66,7 @@ export function sendCalendarUpdate(event: CalendarEvent, recipients: $ReadOnlyAr
 			name,
 			address
 		}))
-		editor.initWithTemplate({bcc}, lang.get("eventUpdated_msg", {"event": event.summary}),
+		editor.initWithTemplate({bcc}, lang.get("eventUpdated_msg", {"{event}": event.summary}),
 			makeInviteEmailBody(event, ""))
 
 		const file = makeInvitationCalendarFile(event, IcalendarCalendarMethod.REQUEST, new Date(), getTimeZone())
@@ -81,7 +81,7 @@ export function sendCalendarCancellation(event: CalendarEvent, recipients: $Read
 			name,
 			address
 		}))
-		editor.initWithTemplate({bcc}, lang.get("eventCancelled_msg", {"event": event.summary}),
+		editor.initWithTemplate({bcc}, lang.get("eventCancelled_msg", {"{event}": event.summary}),
 			makeInviteEmailBody(event, ""))
 
 		const file = makeInvitationCalendarFile(event, IcalendarCalendarMethod.CANCEL, new Date(), getTimeZone())
@@ -100,8 +100,8 @@ function sendCalendarFile(editor: MailEditor, responseFile: DataFile, method: Ca
 }
 
 function organizerLine(event: CalendarEvent) {
-	return `<div style="display: flex"><div style="min-width: 80px">${lang.get("who_label")}:</div>${
-		event.organizer ? `${event.organizer} (${lang.get("organizer_label")})` : ""}</div>`
+	return `<div style="display: flex"><div style="min-width: 80px">${lang.get("who_label")}:</div><div>${
+		event.organizer ? `${event.organizer} (${lang.get("organizer_label")})` : ""}</div></div>`
 }
 
 function whenLine(event: CalendarEvent): string {
