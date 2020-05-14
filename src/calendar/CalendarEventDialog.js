@@ -633,7 +633,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 					renderAttendees()
 				]),
 				m(".flex.col.flex-half.pl-s", [
-					renderDecision(),
+					m(DropDownSelectorN, participationDropdownAttrs),
 					renderOrganizer(),
 				])
 			])),
@@ -686,27 +686,35 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		]
 	}
 
-	function renderDecision() {
-		return m(DropDownSelectorN, participationDropdownAttrs)
-	}
+	const moreButtonActions = () => [
+		{
+			label: "delete_action",
+			type: ButtonType.Dropdown,
+			icon: () => Icons.Trash,
+			click: () => {deleteEvent()}
+		}
+	]
+
+	const renderMoreButton = () => (existingEvent && existingEvent._id && !readOnly)
+		? m(".mr-negative-s", m(ButtonN, attachDropdown({
+			label: "more_label",
+			icon: () => Icons.More,
+		}, moreButtonActions)))
+		: null
 
 	function renderDialogContent() {
 		return m(".calendar-edit-container.pb", [
-			m(TextFieldN, {
-				label: "title_placeholder",
-				value: summary,
-				disabled: readOnly,
-				class: "big-input pt"
-			}),
+			m(".flex.items-end", [
+				m(TextFieldN, {
+					label: "title_placeholder",
+					value: summary,
+					disabled: readOnly,
+					class: "big-input pt flex-grow mr-s"
+				}),
+				renderMoreButton(),
+			]),
 			renderEditing(),
 			m(descriptionEditor),
-			existingEvent && existingEvent._id && !readOnly
-				? m(".mr-negative-s.float-right.flex-end-on-child", m(ButtonN, {
-					label: "delete_action",
-					type: ButtonType.Primary,
-					click: () => deleteEvent()
-				}))
-				: null,
 		])
 	}
 
