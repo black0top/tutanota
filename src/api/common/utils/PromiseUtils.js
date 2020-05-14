@@ -1,24 +1,5 @@
 //@flow
 
-import {downcast} from "./Utils"
-
-
-// flow erases types to empty (bottom) if we write them inline so we give them a name
-type PromiseAllTyped = (<A, B>(a: $Promisable<A>, b: $Promisable<B>) => Promise<[A, B]>)
-	& (<A, B, C>(a: $Promisable<A>, b: $Promisable<B>, c: $Promisable<C>) => Promise<[A, B, C]>)
-	& (<A, B, C, D>(a: $Promisable<A>, b: $Promisable<B>, c: $Promisable<C>, d: $Promisable<D>) =>
-	Promise<[A, B, C, D]>)
-
-// flow fails to type check when arguments are $Promisable so we will roll with less useful definition but the one which works.
-// see https://github.com/facebook/flow/issues/8369
-type PromiseAllStrict = (<A, B>(a: Promise<A>, b: Promise<B>) => Promise<[A, B]>)
-	& (<A, B, C>(a: Promise<A>, b: Promise<B>, c: Promise<C>) => Promise<[A, B, C]>)
-	& (<A, B, C, D>(a: Promise<A>, b: Promise<B>, c: Promise<C>, d: Promise<D>) =>
-	Promise<[A, B, C, D]>)
-
-const _all = (...args) => Promise.all(args)
-export const all: PromiseAllStrict = downcast(_all)
-
 type PromiseMapCallback<T, U> = (el: T, index: number) => $Promisable<U>
 
 /**

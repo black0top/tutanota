@@ -186,7 +186,7 @@ export class WhitelabelSettingsViewer implements UpdatableSettingsViewer {
 			return Promise.all([
 				load(WhitelabelConfigTypeRef, domainInfo.whitelabelConfig),
 				serviceRequest(SysService.BrandingDomainService, HttpMethod.GET, null, BrandingDomainGetReturnTypeRef)
-					.then((response) => response.certificateInfo)
+					.then((response) => neverNull(response.certificateInfo))
 			]).then(([whitelabelConfig, certificateInfo]) => ({whitelabelConfig, certificateInfo}))
 		} else {
 			return Promise.resolve(null)

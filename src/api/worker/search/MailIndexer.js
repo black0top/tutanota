@@ -433,7 +433,7 @@ export class MailIndexer {
 		if (this._indexingCancelled) throw new CancelledError("cancelled indexing in processing index mails")
 		const bodies = indexLoader.loadMailBodies(mails)
 		const files = indexLoader.loadAttachments(mails)
-		return promises.all(bodies, files)
+		return Promise.all([bodies, files])
 		               .then(([bodies, files]) => mails
 			               .map(mail => {
 				               const body = bodies.find(b => isSameId(b._id, mail.body))

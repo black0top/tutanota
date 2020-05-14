@@ -9,7 +9,6 @@ import {CalendarMethod, getAttendeeStatus, IcalendarCalendarMethod} from "../api
 import {makeInvitationCalendarFile, parseCalendarFile} from "./CalendarImporter"
 import {MailEditor} from "../mail/MailEditor"
 import {worker} from "../api/main/WorkerClient"
-import {all as promiseAll} from "../api/common/utils/PromiseUtils"
 import {showCalendarEventDialog} from "./CalendarEventDialog"
 import m from "mithril"
 import {DateTime} from "luxon"
@@ -171,11 +170,11 @@ export function showEventDetailsFromFile(firstCalendarFile: TutanotaFile) {
 			      return
 		      }
 		      const parsedEvent = parsedEventWithAlarms.event
-		      return promiseAll(
+		      return Promise.all([
 			      worker.getEventByUid(parsedEventWithAlarms.uid),
 			      loadOrCreateCalendarInfo(),
 			      mailModel.getUserMailboxDetails(),
-		      ).then(([existingEvent, calendarInfo, mailboxDetails]) => {
+		      ]).then(([existingEvent, calendarInfo, mailboxDetails]) => {
 			      if (existingEvent) {
 				      m.route.set(`/calendar/month/${DateTime.fromJSDate(existingEvent.startTime).toISODate()}`)
 				      // It should be the latest version eventually via CalendarEventUpdates

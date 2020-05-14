@@ -80,7 +80,6 @@ import {LazyLoaded} from "../api/common/utils/LazyLoaded"
 import type {CalendarGroupRoot} from "../api/entities/tutanota/CalendarGroupRoot"
 import type {GroupInfo} from "../api/entities/sys/GroupInfo"
 import {GroupInfoTypeRef} from "../api/entities/sys/GroupInfo"
-import {all as promiseAll} from "../api/common/utils/PromiseUtils"
 import {mailModel} from "../mail/MailModel"
 
 export const LIMIT_PAST_EVENTS_YEARS = 100
@@ -638,18 +637,18 @@ export class CalendarView implements CurrentView {
 	}
 
 	_onEventSelected(event: CalendarEvent) {
-		promiseAll(this._calendarInfos, mailModel.getUserMailboxDetails())
-			.then(([calendarInfos, mailboxDetails]) => {
-				let p = Promise.resolve(event)
-				if (event.repeatRule) {
-					// in case of a repeat rule we want to show the start event for now to indicate that we edit all events.
-					p = load(CalendarEventTypeRef, event._id)
-				}
-				p.then(e => showCalendarEventDialog(getEventStart(e, getTimeZone()), calendarInfos, mailboxDetails, e))
-				 .catch(NotFoundError, () => {
-					 console.log("calendar event not found when clicking on the event")
-				 })
-			})
+		Promise.all([this._calendarInfos, mailModel.getUserMailboxDetails()])
+		       .then(([calendarInfos, mailboxDetails]) => {
+			       let p = Promise.resolve(event)
+			       if (event.repeatRule) {
+				       // in case of a repeat rule we want to show the start event for now to indicate that we edit all events.
+				       p = load(CalendarEventTypeRef, event._id)
+			       }
+			       p.then(e => showCalendarEventDialog(getEventStart(e, getTimeZone()), calendarInfos, mailboxDetails, e))
+			        .catch(NotFoundError, () => {
+				        console.log("calendar event not found when clicking on the event")
+			        })
+		       })
 	}
 
 	_getSelectedView(): CalendarViewTypeEnum {
@@ -696,10 +695,10 @@ export class CalendarView implements CurrentView {
 		} else {
 			dateToUse = date
 		}
-		promiseAll(
+		Promise.all([
 			this._calendarInfos.isFulfilled() ? this._calendarInfos : showProgressDialog("pleaseWait_msg", this._calendarInfos),
 			mailModel.getUserMailboxDetails()
-		).then(([calendars, mailboxDetails]) => showCalendarEventDialog(dateToUse, calendars, mailboxDetails))
+		]).then(([calendars, mailboxDetails]) => showCalendarEventDialog(dateToUse, calendars, mailboxDetails))
 	}
 
 	/**
