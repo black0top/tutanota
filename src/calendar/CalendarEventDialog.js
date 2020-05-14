@@ -583,14 +583,14 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 				})),
 			selectedValue: organizer,
 			dropdownWidth: 300,
-			disabled: !isOwnEvent
+			disabled: !isOwnEvent || !!existingEvent
 		})
 	}
 
 	function renderEditing() {
 		return [
 			m(".flex", [
-				m(".flex.flex-half.pr-m", [
+				m(".flex.flex-half.pr-s", [
 					m(".mr-s.flex-grow", m(startDatePicker)),
 					!allDay()
 						? m(".time-field", m(TimePicker, {
@@ -601,7 +601,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 						}))
 						: null
 				]),
-				m(".flex.flex-half", [
+				m(".flex.flex-half.pl-s", [
 					m(".mr-s.flex-grow", m(endDatePicker)),
 					!allDay()
 						? m(".time-field", m(TimePicker, {
@@ -621,18 +621,18 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 				})),
 				m(".flex-grow"),
 				m(ExpanderButtonN, {
-					label: "attendees_label",
+					label: "guests_label",
 					expanded: attendeesExpanded,
 				})
 			]),
 			m(ExpanderPanelN, {
 				expanded: attendeesExpanded,
 			}, m(".flex", [
-				m(".flex.col.flex-half.pr-m", [
+				m(".flex.col.flex-half.pr-s", [
 					renderInviting(),
 					renderAttendees()
 				]),
-				m(".flex.col.flex-half", [
+				m(".flex.col.flex-half.pl-s", [
 					renderDecision(),
 					renderOrganizer(),
 				])
@@ -654,8 +654,8 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 						: null
 				]),
 			m(".flex", [
-				readOnly ? null : m(".flex.col.flex-half.pr-m", alarmPickerAttrs.map((attrs) => m(DropDownSelectorN, attrs))),
-				m(".flex-half", m(DropDownSelectorN, ({
+				readOnly ? null : m(".flex.col.flex-half.pr-s", alarmPickerAttrs.map((attrs) => m(DropDownSelectorN, attrs))),
+				m(".flex-half.pl-s", m(DropDownSelectorN, ({
 					label: "calendar_label",
 					items: calendarArray.map((calendarInfo) => {
 						return {name: getCalendarName(calendarInfo.groupInfo, calendarInfo.shared), value: calendarInfo}
