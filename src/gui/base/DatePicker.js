@@ -96,7 +96,7 @@ export class DatePicker implements Component {
 				},
 			}, m(this.input)),
 			this._showingDropdown
-				? m(".fixed.content-bg.z3.menu-shadow.plr", {
+				? m(".fixed.content-bg.z3.menu-shadow.plr.pb-s", {
 					style: {width: "280px"},
 					onblur: () => this._showingDropdown = false,
 					oncreate: (vnode) => {
@@ -114,9 +114,11 @@ export class DatePicker implements Component {
 					}
 				}, m(VisualDatePicker, {
 					selectedDate: this.date(),
-					onDateSelected: (newDate) => {
+					onDateSelected: (newDate, dayClick) => {
 						this.setDate(newDate)
-						this._showingDropdown = false
+						if (dayClick) { // Do not close dropdown on changing a month
+							this._showingDropdown = false
+						}
 					},
 					wide: false,
 					startOfTheWeekOffset: this._startOfTheWeekOffset
