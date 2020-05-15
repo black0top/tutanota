@@ -79,6 +79,7 @@ import {Icon} from "../gui/base/Icon"
 import {BootIcons} from "../gui/base/icons/BootIcons"
 import {CheckboxN} from "../gui/base/CheckboxN"
 import {ExpanderButtonN, ExpanderPanelN} from "../gui/base/ExpanderN"
+import {client} from "../misc/ClientDetector"
 
 const TIMESTAMP_ZERO_YEAR = 1970
 
@@ -589,8 +590,8 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 
 	function renderEditing() {
 		return [
-			m(".flex", [
-				m(".flex.flex-half.pr-s", [
+			renderTwoColumnsIfFits(
+				[
 					m(".mr-s.flex-grow", m(startDatePicker)),
 					!allDay()
 						? m(".time-field", m(TimePicker, {
@@ -600,8 +601,8 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 							disabled: readOnly
 						}))
 						: null
-				]),
-				m(".flex.flex-half.pl-s", [
+				],
+				[
 					m(".mr-s.flex-grow", m(endDatePicker)),
 					!allDay()
 						? m(".time-field", m(TimePicker, {
@@ -611,48 +612,49 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 							disabled: readOnly
 						}))
 						: null
-				]),
-			]),
-			m(".flex", [
-				m(".mt-s", m(CheckboxN, {
+				]
+			),
+			m(".flex.items-center", [
+				m(CheckboxN, {
 					checked: allDay,
 					disabled: readOnly,
 					label: () => lang.get("allDay_label")
-				})),
+				}),
 				m(".flex-grow"),
 				m(ExpanderButtonN, {
 					label: "guests_label",
 					expanded: attendeesExpanded,
+					style: {paddingTop: 0},
 				})
 			]),
 			m(ExpanderPanelN, {
-				expanded: attendeesExpanded,
-			}, m(".flex", [
-				m(".flex.col.flex-half.pr-s", [
+					expanded: attendeesExpanded,
+					class: "mb",
+				}, renderTwoColumnsIfFits(
+				m(".flex-grow", [
+					m(DropDownSelectorN, participationDropdownAttrs),
+					renderOrganizer(),
+				]),
+				m(".flex-grow", [
 					renderInviting(),
 					renderAttendees()
 				]),
-				m(".flex.col.flex-half.pl-s", [
-					m(DropDownSelectorN, participationDropdownAttrs),
-					renderOrganizer(),
-				])
-			])),
+				),
+			),
 			eventTooOld
 				? null
-				: m(".flex.mt-s", [
-					// Padding big enough so that end date condition bottom label doesn't push content around
-					m(".flex.flex-nogrow-shrink-half.pr-s.pb-ml", [
-						m(".flex-grow", m(DropDownSelectorN, repeatPickerAttrs)),
-						m(".flex-grow.ml-s"
-							+ (repeatPickerAttrs.selectedValue() ? "" : ".hidden"), m(DropDownSelectorN, repeatIntervalPickerAttrs)),
-					]),
-					repeatPickerAttrs.selectedValue()
-						? m(".flex.flex-nogrow-shrink-half.pl-s", [
-							m(".flex-grow", m(DropDownSelectorN, endTypePickerAttrs)),
-							m(".flex-grow.ml-s", renderStopConditionValue()),
-						])
-						: null
-				]),
+				: renderTwoColumnsIfFits([
+					m(".flex-grow", m(DropDownSelectorN, repeatPickerAttrs)),
+					m(".flex-grow.ml-s"
+						+ (repeatPickerAttrs.selectedValue() ? "" : ".hidden"), m(DropDownSelectorN, repeatIntervalPickerAttrs)),
+				],
+				repeatPickerAttrs.selectedValue()
+					? [
+						m(".flex-grow", m(DropDownSelectorN, endTypePickerAttrs)),
+						m(".flex-grow.ml-s", renderStopConditionValue()),
+					]
+					: null
+				),
 			m(".flex", [
 				readOnly ? null : m(".flex.col.flex-half.pr-s", alarmPickerAttrs.map((attrs) => m(DropDownSelectorN, attrs))),
 				m(".flex-half.pl-s", m(DropDownSelectorN, ({
@@ -726,6 +728,10 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		},
 		{view: renderDialogContent}
 	)
+	if (client.isMobileDevice()) {
+		// Prevent focusing text field automatically on mobile. It opens keyboard and you don't see all details.
+		dialog.setFocusOnLoadFunction(noOp)
+	}
 	dialog.show()
 }
 
@@ -808,7 +814,7 @@ function makeAttendeesField(onBubbleCreated: (Bubble<RecipientInfo>) => void): B
 		return buttonAttrs
 	}
 
-	const invitePeopleValueTextField = new BubbleTextField("shareWithEmailRecipient_label", new MailAddressBubbleHandler({
+	const bubbleHandler = new MailAddressBubbleHandler({
 		createBubble(name: ?string, mailAddress: string, contact: ?Contact): Bubble<RecipientInfo> {
 			const recipientInfo = createRecipientInfo(mailAddress, name, contact, false)
 			const buttonAttrs = attachDropdown({
@@ -821,6 +827,21 @@ function makeAttendeesField(onBubbleCreated: (Bubble<RecipientInfo>) => void): B
 			return bubble
 		},
 
-	}))
+	})
+	const invitePeopleValueTextField = new BubbleTextField("shareWithEmailRecipient_label", bubbleHandler, {marginLeft: 0})
 	return invitePeopleValueTextField
+}
+
+function renderTwoColumnsIfFits(left: Children, right: Children): Children {
+	if (client.isMobileDevice()) {
+		return m(".flex.col", [
+			m(".flex", left),
+			m(".flex", right),
+		])
+	} else {
+		return m(".flex", [
+			m(".flex.flex-half.pr-s", left),
+			m(".flex.flex-half.pl-s", right),
+		])
+	}
 }

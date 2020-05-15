@@ -83,7 +83,8 @@ export class Dialog {
 			},
 		]
 		this.view = (): VirtualElement => {
-			let mobileMargin = px(size.hpad)
+			let marginPx = px(size.hpad)
+			const sidesMargin = styles.bodyWidth > 800 || dialogType !== DialogType.EditLarge ? marginPx : 0
 			return m(this._getDialogWrapperStyle(dialogType), {
 					style: {
 						paddingTop: requiresStatusBarHack() ? '20px' : 'env(safe-area-inset-top)'
@@ -93,12 +94,12 @@ export class Dialog {
 				m(".flex.justify-center.align-self-stretch.rel.overflow-hidden"
 					+ (dialogType === DialogType.EditLarge ? ".flex-grow" : ".transition-margin"), {  // controls horizontal alignment
 						style: {
-							'margin-top': styles.isDesktopLayout() || dialogType !== DialogType.EditLarge ? px(size.hpad) : 0,
-							marginLeft: dialogType !== DialogType.EditLarge ? px(size.hpad) : 0,
-							marginRight: dialogType !== DialogType.EditLarge ? px(size.hpad) : 0,
+							'margin-top': sidesMargin,
+							marginLeft: sidesMargin,
+							marginRight: sidesMargin,
 							'margin-bottom': (Dialog._keyboardHeight > 0)
 								? px(Dialog._keyboardHeight)
-								: dialogType === DialogType.EditLarge ? 0 : mobileMargin,
+								: dialogType === DialogType.EditLarge ? 0 : marginPx,
 						},
 					}, m(this._getDialogStyle(dialogType) + dialogAttrs("dialog-title", "dialog-message"), {
 						onclick: (e: MouseEvent) => e.stopPropagation(), // do not propagate clicks on the dialog as the Modal expects all propagated clicks to be clicks on the background
