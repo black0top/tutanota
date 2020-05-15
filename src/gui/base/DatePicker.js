@@ -86,8 +86,8 @@ export class DatePicker implements Component {
 
 	_documentClickListener: ?MouseEventListener;
 
-	view = (vnode: Vnode<void>) => {
-		return m("", [
+	view = () => {
+		return m(".rel", [
 			m("div", {
 				onclick: () => {
 					if (!this._disabled) {
@@ -123,7 +123,18 @@ export class DatePicker implements Component {
 					wide: false,
 					startOfTheWeekOffset: this._startOfTheWeekOffset
 				}))
-				: null
+				: null,
+			client.isMobileDevice()
+				? m("input.fill-absolute", {
+					type: "date",
+					style: {
+						opacity: 0,
+						// This overrides platform-specific width setting
+						width: "100%",
+					},
+					oninput: (event) => this.setDate(new Date(event.target.valueAsDate))
+				})
+				: null,
 		])
 	}
 
