@@ -99,18 +99,40 @@ function _repeatRulesEqual(repeatRule: ?CalendarRepeatRule, repeatRule2: ?Calend
 			repeatRule.timeZone === repeatRule2.timeZone)
 }
 
-// interpret it as full day in Europe/Berlin, not in the UTC.
+/**
+ * Capability for events is fairly complicated:
+ * Not share "shared" means "not owner of the calendar". Calendar always looks like personal for the owner.
+ *
+ * | Calendar | Organizer | Can do |
+ * |----------|-----------|---------
+ * | Personal | Self      | everything
+ * | Personal | Other     | everything (local copy of shared event)
+ * | Shared   | Self      | everything
+ * | Shared   | Other     | cannot modify if there are guests
+ */
 export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarInfo>, mailboxDetail: MailboxDetail,
                                         existingEvent?: CalendarEvent) {
 	const summary = stream("")
 	let calendarArray = Array.from(calendars.values())
 	let readOnly = false
+	const mailAddresses = getEnabledMailAddresses(mailboxDetail)
+	const attendees = existingEvent && existingEvent.attendees.slice() || []
+	const organizer = stream(existingEvent && existingEvent.organizer || getDefaultSenderFromUser())
+	const isOwnEvent = mailAddresses.includes(organizer())
+	// TODO: this should change dynamically depending on the selected calendar
+	let canModifyGuests = isOwnEvent
+	let canModifyOwnAttendance = true
+
 	if (!existingEvent) {
 		calendarArray = calendarArray.filter(calendarInfo => hasCapabilityOnGroup(logins.getUserController().user, calendarInfo.group, ShareCapability.Write))
 	} else {
-		const calendarInfoForEvent = calendars.get(neverNull(existingEvent._ownerGroup))
+		// OwnerGroup is not set for invites
+		const calendarInfoForEvent = existingEvent._ownerGroup && calendars.get(existingEvent._ownerGroup)
 		if (calendarInfoForEvent) {
 			readOnly = !hasCapabilityOnGroup(logins.getUserController().user, calendarInfoForEvent.group, ShareCapability.Write)
+				|| calendarInfoForEvent.shared && attendees.length > 0
+			canModifyGuests = isOwnEvent && !calendarInfoForEvent.shared
+			canModifyOwnAttendance = !calendarInfoForEvent.shared
 		}
 	}
 	const zone = getTimeZone()
@@ -297,11 +319,6 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		}
 	}
 
-	const mailAddresses = getEnabledMailAddresses(mailboxDetail)
-	const attendees = existingEvent && existingEvent.attendees.slice() || []
-	const organizer = stream(existingEvent && existingEvent.organizer || getDefaultSenderFromUser())
-	const isOwnEvent = mailAddresses.includes(organizer())
-
 	const participationStatus = stream(CalendarAttendeeStatus.NEEDS_ACTION)
 	let ownAttendee
 	if (existingEvent && !isOwnEvent) {
@@ -457,19 +474,24 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 
 		;(existingAttendees.length ? Dialog.confirm("sendEventUpdate_msg") : Promise.resolve(false)).then((shouldSendOutUpdates) => {
 			let updatePromise
-			if (existingEvent == null
-				|| existingEvent._ownerGroup !== newEvent._ownerGroup // event has been moved to another calendar
-				|| newEvent.startTime.getTime() !== existingEvent.startTime.getTime()
-				|| !_repeatRulesEqual(newEvent.repeatRule, existingEvent.repeatRule)) {
+			const safeExistingEvent = existingEvent
+			if (safeExistingEvent == null
+				|| safeExistingEvent._ownerGroup !== newEvent._ownerGroup // event has been moved to another calendar
+				|| newEvent.startTime.getTime() !== safeExistingEvent.startTime.getTime()
+				|| !_repeatRulesEqual(newEvent.repeatRule, safeExistingEvent.repeatRule)) {
 				// if values of the existing events have changed that influence the alarm time then delete the old event and create a new one.
 				assignEventId(newEvent, zone, groupRoot)
 				// Reset ownerEncSessionKey because it cannot be set for new entity, it will be assigned by the CryptoFacade
 				newEvent._ownerEncSessionKey = null
 				// Reset permissions because server will assign them
 				downcast(newEvent)._permissions = null
-				updatePromise = worker.createCalendarEvent(newEvent, newAlarms, existingEvent)
+
+				// We don't want to pass event from ics file to the facade because it's just a template event and there's nothing ot clean
+				// up.
+				const oldEventToPass = safeExistingEvent && safeExistingEvent._ownerGroup ? safeExistingEvent : null
+				updatePromise = worker.createCalendarEvent(newEvent, newAlarms, oldEventToPass)
 			} else {
-				updatePromise = worker.updateCalendarEvent(newEvent, newAlarms, existingEvent)
+				updatePromise = worker.updateCalendarEvent(newEvent, newAlarms, safeExistingEvent)
 			}
 			dialog.close()
 			return updatePromise
@@ -506,7 +528,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 	const attendeesExpanded = stream(false)
 
 	function renderInviting(): Children {
-		return !isOwnEvent ? null : m(attendeesField)
+		return canModifyGuests ? m(attendeesField) : null
 	}
 
 	function renderAttendees() {
@@ -542,7 +564,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 					},
 					[renderStatusIcon(a), `${a.address.name || ""} ${a.address.address}`]
 				),
-				isOwnEvent
+				canModifyGuests
 					? m(ButtonN, {
 						label: "delete_action",
 						type: ButtonType.Action,
@@ -575,18 +597,29 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 	}
 
 	function renderOrganizer(): Children {
+		const disabled = readOnly || attendees.length > 0
+		const items = []
+		const selectedOrganizer = existingEvent && existingEvent.organizer
+		if (selectedOrganizer) {
+			items.push({name: selectedOrganizer, value: selectedOrganizer})
+		}
+		if (!disabled) {
+			mailAddresses.forEach((mailAddress) => {
+				if (mailAddress !== selectedOrganizer) {
+					items.push({name: mailAddress, value: mailAddress})
+				}
+			})
+		}
 		return m(DropDownSelectorN, {
 			label: "organizer_label",
-			items: mailAddresses
-				.map(mailAddress => ({
-					name: mailAddress,
-					value: mailAddress
-				})),
+			items,
 			selectedValue: organizer,
 			dropdownWidth: 300,
-			disabled: !isOwnEvent || !!existingEvent
+			disabled,
 		})
 	}
+
+	const renderGoingSelector = () => m(DropDownSelectorN, Object.assign({}, participationDropdownAttrs, {disabled: !canModifyOwnAttendance}))
 
 	function renderEditing() {
 		return [
@@ -632,7 +665,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 					class: "mb",
 				}, renderTwoColumnsIfFits(
 				m(".flex-grow", [
-					m(DropDownSelectorN, participationDropdownAttrs),
+					renderGoingSelector(),
 					renderOrganizer(),
 				]),
 				m(".flex-grow", [
