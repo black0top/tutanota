@@ -138,28 +138,6 @@ export class DatePicker implements Component {
 		])
 	}
 
-	_showPickerDialog = () => {
-		let date: ?Date
-		const dialog = Dialog.showActionDialog({
-			title: "",
-			child: {
-				view: () => m(VisualDatePicker, {
-					selectedDate: date || this.date(),
-					onDateSelected: (newDate, dayClick) => {
-						if (dayClick) {
-							this.setDate(newDate)
-							dialog.close()
-						}
-					},
-					wide: true,
-					startOfTheWeekOffset: this._startOfTheWeekOffset
-				}),
-			},
-			okAction: null,
-			allowCancel: true
-		})
-	}
-
 	setDate(date: ?Date) {
 		this.invalidDate = false
 		this.date(date)
