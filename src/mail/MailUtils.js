@@ -43,6 +43,7 @@ import type {InlineImages} from "./MailViewer"
 import type {Mail} from "../api/entities/tutanota/Mail"
 import type {MailFolder} from "../api/entities/tutanota/MailFolder"
 import type {File as TutanotaFile} from "../api/entities/tutanota/File"
+import type {GroupInfo} from "../api/entities/sys/GroupInfo"
 
 assertMainOrNode()
 
@@ -360,12 +361,18 @@ export function getSortedCustomFolders(folders: MailFolder[]): MailFolder[] {
 	})
 }
 
-
+/**
+ * @deprecated Stop grabbing singleton dependencies, it's bad for your health. use {@link getEnabledMailAddressesWithUser} instead
+ */
 export function getEnabledMailAddresses(mailboxDetails: MailboxDetail): string[] {
-	if (isUserMailbox(mailboxDetails)) {
-		return getEnabledMailAddressesForGroupInfo(logins.getUserController().userGroupInfo)
+	return getEnabledMailAddressesWithUser(mailboxDetails, logins.getUserController().userGroupInfo)
+}
+
+export function getEnabledMailAddressesWithUser(mailboxDetail: MailboxDetail, userGroupInfo: GroupInfo) {
+	if (isUserMailbox(mailboxDetail)) {
+		return getEnabledMailAddressesForGroupInfo(userGroupInfo)
 	} else {
-		return getEnabledMailAddressesForGroupInfo(mailboxDetails.mailGroupInfo)
+		return getEnabledMailAddressesForGroupInfo(mailboxDetail.mailGroupInfo)
 	}
 }
 
