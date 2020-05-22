@@ -27,7 +27,7 @@ import {
 	ShareCapability,
 	TimeFormat
 } from "../api/common/TutanotaConstants"
-import {findAndRemove, last, numberRange, remove} from "../api/common/utils/ArrayUtils"
+import {findAndRemove, numberRange, remove} from "../api/common/utils/ArrayUtils"
 import type {AlarmInfo} from "../api/entities/sys/AlarmInfo"
 import {createAlarmInfo} from "../api/entities/sys/AlarmInfo"
 import {logins} from "../api/main/LoginController"
@@ -36,7 +36,8 @@ import {
 	calendarAttendeeStatusDescription,
 	createRepeatRuleWithValues,
 	filterInt,
-	generateUid, getAllDayDateForTimezone,
+	generateUid,
+	getAllDayDateForTimezone,
 	getAllDayDateUTCFromZone,
 	getCalendarName,
 	getEventEnd,
@@ -50,7 +51,7 @@ import {
 	timeString,
 	timeStringFromParts
 } from "./CalendarUtils"
-import {isAllDayEvent} from "../api/common/utils/CommonCalendarUtils"
+import {generateEventElementId, isAllDayEvent} from "../api/common/utils/CommonCalendarUtils"
 import {NotFoundError} from "../api/common/error/RestError"
 import {TimePicker} from "../gui/base/TimePicker"
 import {createRecipientInfo, getDefaultSenderFromUser, getDisplayText, getEnabledMailAddresses} from "../mail/MailUtils"
@@ -93,6 +94,8 @@ class EventViewModel {
 	+existingEvent: ?CalendarEvent
 	_oldStartTime: ?string;
 	+_zone: string;
+	// We keep alarms read-only so that view can diff just array and not all elements
+	alarms: $ReadOnlyArray<AlarmInfo>;
 
 	constructor(date: Date, calendars: Map<Id, CalendarInfo>, mailboxDetail: MailboxDetail, existingEvent?: CalendarEvent) {
 		this.summary = stream("")
@@ -108,6 +111,7 @@ class EventViewModel {
 		this._zone = getTimeZone()
 		this.startDate = getStartOfDayWithZone(date, this._zone)
 		this.endDate = getStartOfDayWithZone(date, this._zone)
+		this.alarms = []
 
 		/**
 		 * Capability for events is fairly complicated:
@@ -263,6 +267,26 @@ class EventViewModel {
 				repeat.endValue = new Date().getTime()
 			} else {
 				repeat.endValue = 1
+			}
+		}
+	}
+
+	addAlarm(trigger: AlarmIntervalEnum) {
+		const alarm = createCalendarAlarm(generateEventElementId(Date.now()), trigger)
+		this.alarms = this.alarms.concat(alarm)
+	}
+
+	changeAlarm(identifier: string, trigger: ?AlarmIntervalEnum) {
+		const newAlarms = this.alarms.slice()
+		for (let i = 0; i < newAlarms.length; i++) {
+			if (newAlarms[i].alarmIdentifier === identifier) {
+				if (trigger) {
+					newAlarms[i].trigger = trigger
+				} else {
+					newAlarms.splice(i, 1)
+				}
+				this.alarms = newAlarms
+				break
 			}
 		}
 	}
@@ -488,8 +512,6 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 	const repeatEndDatePicker = new DatePicker(startOfTheWeekOffset, "emptyString_msg", "emptyString_msg", true)
 	repeatEndDatePicker.date.map((date) => viewModel.onRepeatEndDateSelected(date))
 
-	const alarmPickerAttrs = []
-
 	const alarmIntervalItems = [
 		{name: lang.get("comboBoxSelectionNone_msg"), value: null},
 		{name: lang.get("calendarReminderIntervalFiveMinutes_label"), value: AlarmInterval.FIVE_MINUTES},
@@ -501,27 +523,6 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		{name: lang.get("calendarReminderIntervalThreeDays_label"), value: AlarmInterval.THREE_DAYS},
 		{name: lang.get("calendarReminderIntervalOneWeek_label"), value: AlarmInterval.ONE_WEEK}
 	]
-
-	function createAlarmPicker(): DropDownSelectorAttrs<?AlarmIntervalEnum> {
-		const selectedValue = stream(null)
-		const attrs = {
-			label: () => lang.get("reminderBeforeEvent_label"),
-			items: alarmIntervalItems,
-			selectedValue,
-			icon: BootIcons.Expand,
-		}
-		selectedValue.map((v) => {
-			const lastAttrs = last(alarmPickerAttrs)
-			if (attrs === lastAttrs && selectedValue() != null) {
-				alarmPickerAttrs.push(createAlarmPicker())
-			} else if (v == null && alarmPickerAttrs.some(a => a !== attrs && a.selectedValue() == null)) {
-				remove(alarmPickerAttrs, attrs)
-			}
-		})
-		return attrs
-	}
-
-	alarmPickerAttrs.push(createAlarmPicker())
 
 	const endOccurrencesStream = memoized(stream)
 
@@ -822,7 +823,26 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 				),
 				renderRepeatRulePicker(),
 				m(".flex", [
-					readOnly ? null : m(".flex.col.flex-half.pr-s", alarmPickerAttrs.map((attrs) => m(DropDownSelectorN, attrs))),
+					readOnly
+						? null
+						: m(".flex.col.flex-half.pr-s",
+						[
+							viewModel.alarms.map((a) => m(DropDownSelectorN, {
+								label: "reminderBeforeEvent_label",
+								items: alarmIntervalItems,
+								selectedValue: stream(downcast(a.trigger)),
+								icon: BootIcons.Expand,
+								selectionChangedHandler: (value) => viewModel.changeAlarm(a.alarmIdentifier, value),
+								key: a.alarmIdentifier
+							})),
+							m(DropDownSelectorN, {
+								label: "reminderBeforeEvent_label",
+								items: alarmIntervalItems,
+								selectedValue: stream(null),
+								icon: BootIcons.Expand,
+								selectionChangedHandler: (value) => value && viewModel.addAlarm(value)
+							})
+						]),
 					renderCalendarPicker(),
 				]),
 				renderLocationField(),
