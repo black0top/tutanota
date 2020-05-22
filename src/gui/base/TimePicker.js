@@ -117,9 +117,10 @@ export class TimePicker implements MComponent<Attrs> {
 
 	_onSelected(attrs: Attrs) {
 		this._focused = false
-		const parsedTime = parseTime(attrs.value)
+		const value = this._value()
+		const parsedTime = parseTime(value)
 		const timeString = parsedTime && timeStringFromParts(parsedTime.hours, parsedTime.minutes, attrs.amPmFormat)
-		attrs.onselected(timeString || attrs.value)
+		attrs.onselected(timeString || value)
 	}
 
 	_setScrollTop(attrs: Attrs, vnode: VnodeDOM<Attrs>) {

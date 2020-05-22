@@ -14,7 +14,7 @@ import type {CalendarEvent} from "../api/entities/tutanota/CalendarEvent"
 import {createCalendarEvent} from "../api/entities/tutanota/CalendarEvent"
 import {erase} from "../api/main/Entity"
 
-import {clone, downcast, neverNull, noOp} from "../api/common/utils/Utils"
+import {clone, downcast, memoized, neverNull, noOp} from "../api/common/utils/Utils"
 import type {ButtonAttrs} from "../gui/base/ButtonN"
 import {ButtonN, ButtonType} from "../gui/base/ButtonN"
 import type {AlarmIntervalEnum, CalendarAttendeeStatusEnum, EndTypeEnum, RepeatPeriodEnum} from "../api/common/TutanotaConstants"
@@ -28,8 +28,6 @@ import {
 	TimeFormat
 } from "../api/common/TutanotaConstants"
 import {findAndRemove, last, numberRange, remove} from "../api/common/utils/ArrayUtils"
-import {incrementByRepeatPeriod} from "./CalendarModel"
-import {DateTime} from "luxon"
 import type {AlarmInfo} from "../api/entities/sys/AlarmInfo"
 import {createAlarmInfo} from "../api/entities/sys/AlarmInfo"
 import {logins} from "../api/main/LoginController"
@@ -38,7 +36,7 @@ import {
 	calendarAttendeeStatusDescription,
 	createRepeatRuleWithValues,
 	filterInt,
-	generateUid,
+	generateUid, getAllDayDateForTimezone,
 	getAllDayDateUTCFromZone,
 	getCalendarName,
 	getEventEnd,
@@ -73,6 +71,7 @@ import {ExpanderButtonN, ExpanderPanelN} from "../gui/base/ExpanderN"
 import {client} from "../misc/ClientDetector"
 import {worker} from "../api/main/WorkerClient"
 import {sendCalendarCancellation, sendCalendarInvite, sendCalendarUpdate} from "./CalendarInvites"
+import {incrementByRepeatPeriod} from "./CalendarModel"
 
 const TIMESTAMP_ZERO_YEAR = 1970
 
@@ -135,22 +134,21 @@ class EventViewModel {
 			}
 			if (existingEvent.repeatRule) {
 				const existingRule = existingEvent.repeatRule
-				this.repeat = {
+				const repeat = {
 					frequency: downcast(existingRule.frequency),
 					interval: Number(existingRule.interval),
 					endType: downcast(existingRule.endType),
 					endValue: existingRule.endType === EndType.Count ? Number(existingRule.endValue) : 1,
 				}
 				// TODO end type date
-				// if (existingRule.endType === EndType.UntilDate) {
-				// 	const rawEndDate = new Date(Number(existingRule.endValue))
-				// 	const localDate = allDay() ? getAllDayDateForTimezone(rawEndDate, zone) : rawEndDate
-				// 	// Shown date is one day behind the actual end (for us it's excluded)
-				// 	const shownDate = incrementByRepeatPeriod(localDate, RepeatPeriod.DAILY, -1, zone)
-				// 	repeatEndDatePicker.setDate(shownDate)
-				// } else {
-				// 	repeatEndDatePicker.setDate(null)
-				// }
+				if (existingRule.endType === EndType.UntilDate) {
+					const rawEndDate = new Date(Number(existingRule.endValue))
+					const localDate = this.allDay() ? getAllDayDateForTimezone(rawEndDate, this._zone) : rawEndDate
+					// Shown date is one day behind the actual end (for us it's excluded)
+					const shownDate = incrementByRepeatPeriod(localDate, RepeatPeriod.DAILY, -1, this._zone)
+					repeat.endValue = shownDate.getTime()
+				}
+				this.repeat = repeat
 			} else {
 				this.repeat = null
 			}
@@ -224,6 +222,48 @@ class EventViewModel {
 	onEndDateSelected(date: ?Date) {
 		if (date) {
 			this.endDate = date
+		}
+	}
+
+	onRepeatPeriodSelected(repeatPeriod: ?RepeatPeriodEnum) {
+		if (repeatPeriod == null) {
+			this.repeat = null
+		} else {
+			// Provide default values if repeat is not there, override them with existing repeat if it's there, provide new frequency
+			// First empty object is for Flow.
+			this.repeat = Object.assign({}, {interval: 1, endType: EndType.Never, endValue: 1}, this.repeat, {frequency: repeatPeriod})
+		}
+	}
+
+	onEndOccurencesSelected(endValue: number) {
+		if (this.repeat && this.repeat.endType === EndType.Count) {
+			this.repeat.endValue = endValue
+		}
+	}
+
+	onRepeatEndDateSelected(endDate: ?Date) {
+		const {repeat} = this
+		if (endDate && repeat && repeat.endType === EndType.UntilDate) {
+			repeat.endValue = endDate.getTime()
+		}
+	}
+
+	onRepeatIntervalChanged(interval: number) {
+		if (this.repeat) {
+			this.repeat.interval = interval
+		}
+	}
+
+	onRepeatEndTypeChanged(endType: EndTypeEnum) {
+		const {repeat} = this
+		if (repeat) {
+			repeat.endType = endType
+			if (endType === EndType.UntilDate) {
+				// TODO: improve
+				repeat.endValue = new Date().getTime()
+			} else {
+				repeat.endValue = 1
+			}
 		}
 	}
 
@@ -439,14 +479,14 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 	const startOfTheWeekOffset = getStartOfTheWeekOffsetForUser()
 	const startDatePicker = new DatePicker(startOfTheWeekOffset, "dateFrom_label", "emptyString_msg", true, readOnly)
 	const endDatePicker = new DatePicker(startOfTheWeekOffset, "dateTo_label", "emptyString_msg", true, readOnly)
-	startDatePicker.date.map(viewModel.onStartDateSelected)
-	endDatePicker.date.map(viewModel.onEndDateSelected)
+	startDatePicker.date.map((date) => viewModel.onStartDateSelected(date))
+	endDatePicker.date.map((date) => viewModel.onEndDateSelected(date))
 
-	const repeatPickerAttrs = createRepeatingDatePicker(readOnly)
-	const repeatIntervalPickerAttrs = createIntervalPicker(readOnly)
-	const endTypePickerAttrs = createEndTypePicker(readOnly)
+	const repeatValues = createRepeatValues()
+	const intervalValues = createIntevalValues()
+	const endTypeValues = createEndTypeValues()
 	const repeatEndDatePicker = new DatePicker(startOfTheWeekOffset, "emptyString_msg", "emptyString_msg", true)
-	const endCountPickerAttrs = createEndCountPicker()
+	repeatEndDatePicker.date.map((date) => viewModel.onRepeatEndDateSelected(date))
 
 	const alarmPickerAttrs = []
 
@@ -483,20 +523,21 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 
 	alarmPickerAttrs.push(createAlarmPicker())
 
-	endTypePickerAttrs.selectedValue.map((endType) => {
-		if (endType === EndType.UntilDate && !repeatEndDatePicker.date()) {
-			const newRepeatEnd = incrementByRepeatPeriod(neverNull(startDatePicker.date()), neverNull(repeatPickerAttrs.selectedValue()),
-				neverNull(repeatIntervalPickerAttrs.selectedValue()), DateTime.local().zoneName)
-			repeatEndDatePicker.setDate(newRepeatEnd)
-		}
-	})
+	const endOccurrencesStream = memoized(stream)
 
-	function renderStopConditionValue(): Children {
-		if (repeatPickerAttrs.selectedValue() == null || endTypePickerAttrs.selectedValue() === EndType.Never) {
+	function renderEndValue(): Children {
+		if (viewModel.repeat == null || viewModel.repeat.endType === EndType.Never) {
 			return null
-		} else if (endTypePickerAttrs.selectedValue() === EndType.Count) {
-			return m(DropDownSelectorN, endCountPickerAttrs)
-		} else if (endTypePickerAttrs.selectedValue() === EndType.UntilDate) {
+		} else if (viewModel.repeat.endType === EndType.Count) {
+			return m(DropDownSelectorN, {
+				label: "emptyString_msg",
+				items: intervalValues,
+				selectedValue: endOccurrencesStream(viewModel.repeat.endValue),
+				selectionChangedHandler: (endValue: number) => viewModel.onEndOccurencesSelected(endValue),
+				icon: BootIcons.Expand,
+			})
+		} else if (viewModel.repeat.endType === EndType.UntilDate) {
+			repeatEndDatePicker.setDate(new Date(viewModel.repeat.endValue))
 			return m(repeatEndDatePicker)
 		} else {
 			return null
@@ -639,7 +680,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 			!viewModel.allDay()
 				? m(".time-field", m(TimePicker, {
 					value: viewModel.startTime,
-					onselected: viewModel.onStartTimeSelected,
+					onselected: (time) => viewModel.onStartTimeSelected(time),
 					amPmFormat: viewModel.amPmFormat,
 					disabled: readOnly
 				}))
@@ -650,7 +691,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 			!viewModel.allDay()
 				? m(".time-field", m(TimePicker, {
 					value: viewModel.endTime,
-					onselected: viewModel.onEndTimeSelected,
+					onselected: (time) => viewModel.onEndTimeSelected(time),
 					amPmFormat: viewModel.amPmFormat,
 					disabled: readOnly
 				}))
@@ -689,59 +730,105 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		}: DropDownSelectorAttrs<CalendarInfo>)))
 	}
 
+	// Avoid creating stream on each render. Will create new stream if the value is changed.
+	// We could just change the value of the stream on each render but ultimately we should avoid
+	// passing streams into components.
+	const repeatFrequencyStream = memoized(stream)
+	const repeatIntervalStream = memoized(stream)
+	const endTypeStream = memoized(stream)
+
+	function renderRepeatPeriod() {
+		return m(DropDownSelectorN, {
+			label: "calendarRepeating_label",
+			items: repeatValues,
+			selectedValue: repeatFrequencyStream(viewModel.repeat && viewModel.repeat.frequency || null),
+			selectionChangedHandler: (period) => viewModel.onRepeatPeriodSelected(period),
+			icon: BootIcons.Expand,
+			disabled: readOnly,
+		})
+	}
+
+	function renderRepeatInterval() {
+		return m(DropDownSelectorN, {
+			label: "interval_title",
+			items: intervalValues,
+			selectedValue: repeatIntervalStream(viewModel.repeat && viewModel.repeat.interval || 1),
+			selectionChangedHandler: (period) => viewModel.onRepeatIntervalChanged(period),
+			icon: BootIcons.Expand,
+			disabled: readOnly
+		})
+	}
+
+	function renderEndType(repeat) {
+		return m(DropDownSelectorN, {
+				label: () => lang.get("calendarRepeatStopCondition_label"),
+				items: endTypeValues,
+				selectedValue: endTypeStream(repeat.endType),
+				selectionChangedHandler: (period) => viewModel.onRepeatEndTypeChanged(period),
+				icon: BootIcons.Expand,
+				disabled: readOnly,
+			}
+		)
+	}
+
 	const renderRepeatRulePicker = () => renderTwoColumnsIfFits([
-			m(".flex-grow", m(DropDownSelectorN, repeatPickerAttrs)),
+			// Repeat type == Frequency: Never, daily, annually etc
+			m(".flex-grow", renderRepeatPeriod()),
+			// Repeat interval: every day, every second day etc
 			m(".flex-grow.ml-s"
-				+ (repeatPickerAttrs.selectedValue() ? "" : ".hidden"), m(DropDownSelectorN, repeatIntervalPickerAttrs)),
+				+ (viewModel.repeat ? "" : ".hidden"), renderRepeatInterval()),
 		],
-		repeatPickerAttrs.selectedValue()
+		viewModel.repeat
 			? [
-				m(".flex-grow", m(DropDownSelectorN, endTypePickerAttrs)),
-				m(".flex-grow.ml-s", renderStopConditionValue()),
+				m(".flex-grow", renderEndType(viewModel.repeat)),
+				m(".flex-grow.ml-s", renderEndValue()),
 			]
 			: null
 	)
 
-	function renderEditing() {
+	function renderDialogContent() {
 		startDatePicker.setDate(viewModel.startDate)
 		endDatePicker.setDate(viewModel.endDate)
 
-		return [
-			renderDateTimePickers(),
-			m(".flex.items-center", [
-				m(CheckboxN, {
-					checked: viewModel.allDay,
-					disabled: readOnly,
-					label: () => lang.get("allDay_label")
-				}),
-				m(".flex-grow"),
-				m(ExpanderButtonN, {
-					label: "guests_label",
-					expanded: attendeesExpanded,
-					style: {paddingTop: 0},
-				})
-			]),
-			m(ExpanderPanelN, {
-					expanded: attendeesExpanded,
-					class: "mb",
-				}, renderTwoColumnsIfFits(
-				m(".flex-grow", [
-					renderGoingSelector(),
-					renderOrganizer(),
+		return m(".calendar-edit-container.pb", [
+				renderHeading(),
+				renderDateTimePickers(),
+				m(".flex.items-center", [
+					m(CheckboxN, {
+						checked: viewModel.allDay,
+						disabled: readOnly,
+						label: () => lang.get("allDay_label")
+					}),
+					m(".flex-grow"),
+					m(ExpanderButtonN, {
+						label: "guests_label",
+						expanded: attendeesExpanded,
+						style: {paddingTop: 0},
+					})
 				]),
-				m(".flex-grow", [
-					renderInviting(),
-					renderAttendees()
-				]),
+				m(ExpanderPanelN, {
+						expanded: attendeesExpanded,
+						class: "mb",
+					}, renderTwoColumnsIfFits(
+					m(".flex-grow", [
+						renderGoingSelector(),
+						renderOrganizer(),
+					]),
+					m(".flex-grow", [
+						renderInviting(),
+						renderAttendees()
+					]),
+					),
 				),
-			),
-			renderRepeatRulePicker(),
-			m(".flex", [
-				readOnly ? null : m(".flex.col.flex-half.pr-s", alarmPickerAttrs.map((attrs) => m(DropDownSelectorN, attrs))),
-				renderCalendarPicker(),
-			]),
-			renderLocationField(),
-		]
+				renderRepeatRulePicker(),
+				m(".flex", [
+					readOnly ? null : m(".flex.col.flex-half.pr-s", alarmPickerAttrs.map((attrs) => m(DropDownSelectorN, attrs))),
+					renderCalendarPicker(),
+				]),
+				renderLocationField(),
+				m(descriptionEditor),
+			]
+		)
 	}
 
 	const moreButtonActions = () => [
@@ -760,19 +847,15 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		}, moreButtonActions)))
 		: null
 
-	function renderDialogContent() {
-		return m(".calendar-edit-container.pb", [
-			m(".flex.items-end", [
-				m(TextFieldN, {
-					label: "title_placeholder",
-					value: viewModel.summary,
-					disabled: readOnly,
-					class: "big-input pt flex-grow mr-s"
-				}),
-				renderMoreButton(),
-			]),
-			renderEditing(),
-			m(descriptionEditor),
+	function renderHeading() {
+		return m(".flex.items-end", [
+			m(TextFieldN, {
+				label: "title_placeholder",
+				value: viewModel.summary,
+				disabled: readOnly,
+				class: "big-input pt flex-grow mr-s"
+			}),
+			renderMoreButton(),
 		])
 	}
 
@@ -782,7 +865,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 			right: [{label: "ok_action", click: () => okAction(dialog), type: ButtonType.Primary}],
 			middle: () => lang.get("createEvent_label"),
 		},
-		{view: renderDialogContent}
+		{view: () => m(".calendar-edit-container.pb", renderDialogContent())}
 	)
 	if (client.isMobileDevice()) {
 		// Prevent focusing text field automatically on mobile. It opens keyboard and you don't see all details.
@@ -798,63 +881,28 @@ function createCalendarAlarm(identifier: string, trigger: string): AlarmInfo {
 	return calendarAlarmInfo
 }
 
-
-function createRepeatingDatePicker(disabled: boolean): DropDownSelectorAttrs<?RepeatPeriodEnum> {
-	const repeatValues = [
+function createRepeatValues() {
+	return [
 		{name: lang.get("calendarRepeatIntervalNoRepeat_label"), value: null},
 		{name: lang.get("calendarRepeatIntervalDaily_label"), value: RepeatPeriod.DAILY},
 		{name: lang.get("calendarRepeatIntervalWeekly_label"), value: RepeatPeriod.WEEKLY},
 		{name: lang.get("calendarRepeatIntervalMonthly_label"), value: RepeatPeriod.MONTHLY},
 		{name: lang.get("calendarRepeatIntervalAnnually_label"), value: RepeatPeriod.ANNUALLY}
 	]
-
-	return {
-		label: "calendarRepeating_label",
-		items: repeatValues,
-		selectedValue: stream(repeatValues[0].value),
-		icon: BootIcons.Expand,
-		disabled
-	}
 }
 
-const intervalValues = numberRange(1, 256).map(n => {
-	return {name: String(n), value: n}
-})
-
-
-function createIntervalPicker(disabled: boolean): DropDownSelectorAttrs<number> {
-	return {
-		label: "interval_title",
-		items: intervalValues,
-		selectedValue: stream(intervalValues[0].value),
-		icon: BootIcons.Expand,
-		disabled
-	}
+function createIntevalValues() {
+	return numberRange(1, 256).map(n => {
+		return {name: String(n), value: n}
+	})
 }
 
-function createEndTypePicker(disabled: boolean): DropDownSelectorAttrs<EndTypeEnum> {
-	const stopConditionValues = [
+function createEndTypeValues() {
+	return [
 		{name: lang.get("calendarRepeatStopConditionNever_label"), value: EndType.Never},
 		{name: lang.get("calendarRepeatStopConditionOccurrences_label"), value: EndType.Count},
 		{name: lang.get("calendarRepeatStopConditionDate_label"), value: EndType.UntilDate}
 	]
-
-	return {
-		label: () => lang.get("calendarRepeatStopCondition_label"),
-		items: stopConditionValues,
-		selectedValue: stream(stopConditionValues[0].value),
-		icon: BootIcons.Expand,
-		disabled
-	}
-}
-
-export function createEndCountPicker(): DropDownSelectorAttrs<number> {
-	return {
-		label: "emptyString_msg",
-		items: intervalValues,
-		selectedValue: stream(intervalValues[0].value),
-		icon: BootIcons.Expand,
-	}
 }
 
 function makeAttendeesField(onBubbleCreated: (Bubble<RecipientInfo>) => void): BubbleTextField<RecipientInfo> {
