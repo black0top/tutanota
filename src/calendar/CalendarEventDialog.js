@@ -18,15 +18,7 @@ import {clone, downcast, memoized, neverNull, noOp} from "../api/common/utils/Ut
 import type {ButtonAttrs} from "../gui/base/ButtonN"
 import {ButtonN, ButtonType} from "../gui/base/ButtonN"
 import type {AlarmIntervalEnum, CalendarAttendeeStatusEnum, EndTypeEnum, RepeatPeriodEnum} from "../api/common/TutanotaConstants"
-import {
-	AlarmInterval,
-	CalendarAttendeeStatus,
-	EndType,
-	getAttendeeStatus,
-	RepeatPeriod,
-	ShareCapability,
-	TimeFormat
-} from "../api/common/TutanotaConstants"
+import {AlarmInterval, CalendarAttendeeStatus, EndType, RepeatPeriod, TimeFormat} from "../api/common/TutanotaConstants"
 import {findAndRemove, numberRange, remove} from "../api/common/utils/ArrayUtils"
 import type {AlarmInfo} from "../api/entities/sys/AlarmInfo"
 import {createAlarmInfo} from "../api/entities/sys/AlarmInfo"
@@ -46,7 +38,6 @@ import {
 	getStartOfNextDayWithZone,
 	getStartOfTheWeekOffsetForUser,
 	getTimeZone,
-	hasCapabilityOnGroup,
 	parseTime,
 	timeString,
 	timeStringFromParts
@@ -54,7 +45,7 @@ import {
 import {generateEventElementId, isAllDayEvent} from "../api/common/utils/CommonCalendarUtils"
 import {NotFoundError} from "../api/common/error/RestError"
 import {TimePicker} from "../gui/base/TimePicker"
-import {createRecipientInfo, getDefaultSenderFromUser, getDisplayText, getEnabledMailAddresses} from "../mail/MailUtils"
+import {createRecipientInfo, getDefaultSenderFromUser, getDisplayText} from "../mail/MailUtils"
 import type {MailboxDetail} from "../mail/MailModel"
 import type {CalendarEventAttendee} from "../api/entities/tutanota/CalendarEventAttendee"
 import {createCalendarEventAttendee} from "../api/entities/tutanota/CalendarEventAttendee"
@@ -88,11 +79,13 @@ class EventViewModel {
 	repeat: ?{frequency: RepeatPeriodEnum, interval: number, endType: EndTypeEnum, endValue: number}
 	+attendees: Array<CalendarEventAttendee>;
 	organizer: ?string;
+	+possibleOrgannizers: $ReadOnlyArray<string>;
 	+location: Stream<string>;
 	+note: Stream<string>;
 	+amPmFormat: bool;
 	+existingEvent: ?CalendarEvent
 	_oldStartTime: ?string;
+	+readOnly: bool;
 	+_zone: string;
 	// We keep alarms read-only so that view can diff just array and not all elements
 	alarms: $ReadOnlyArray<AlarmInfo>;
@@ -103,6 +96,8 @@ class EventViewModel {
 		this.selectedCalendar = stream(this.calendars[0])
 		this.attendees = existingEvent && existingEvent.attendees.slice() || []
 		this.organizer = existingEvent && existingEvent.organizer || getDefaultSenderFromUser()
+		// TODO
+		this.possibleOrgannizers = [this.organizer]
 		this.location = stream("")
 		this.note = stream("")
 		this.allDay = stream(true)
@@ -112,6 +107,7 @@ class EventViewModel {
 		this.startDate = getStartOfDayWithZone(date, this._zone)
 		this.endDate = getStartOfDayWithZone(date, this._zone)
 		this.alarms = []
+		this.readOnly = false // TODO
 
 		/**
 		 * Capability for events is fairly complicated:
@@ -124,6 +120,30 @@ class EventViewModel {
 		 * | Shared   | Self      | everything
 		 * | Shared   | Other     | cannot modify if there are guests
 		 */
+
+		// TODO: re-do this capability things, some of them should be dynamic
+		// const user = logins.getUserController().user
+		// let calendarArray = Array.from(calendars.values())
+		// let readOnly = false
+		// const mailAddresses = getEnabledMailAddresses(mailboxDetail)
+		// const attendees = existingEvent && existingEvent.attendees.slice() || []
+		// const organizer = stream(existingEvent && existingEvent.organizer || getDefaultSenderFromUser())
+		// const isOwnEvent = mailAddresses.includes(organizer())
+		// let canModifyGuests = isOwnEvent
+		// let canModifyOwnAttendance = true
+		//
+		// if (!existingEvent) {
+		// 	calendarArray = calendarArray.filter(calendarInfo => hasCapabilityOnGroup(user, calendarInfo.group, ShareCapability.Write))
+		// } else {
+		// 	// OwnerGroup is not set for invites
+		// 	const calendarInfoForEvent = existingEvent._ownerGroup && calendars.get(existingEvent._ownerGroup)
+		// 	if (calendarInfoForEvent) {
+		// 		readOnly = !hasCapabilityOnGroup(logins.getUserController().user, calendarInfoForEvent.group, ShareCapability.Write)
+		// 			|| calendarInfoForEvent.shared && attendees.length > 0
+		// 		canModifyGuests = isOwnEvent && !calendarInfoForEvent.shared
+		// 		canModifyOwnAttendance = !calendarInfoForEvent.shared
+		// 	}
+		// }
 
 		if (existingEvent) {
 			this.summary(existingEvent.summary)
@@ -186,6 +206,14 @@ class EventViewModel {
 
 	onEndTimeSelected(value: string) {
 		this.endTime = value
+	}
+
+	addAttendee(mailAddress: string) {
+		const attendee = createCalendarEventAttendee({
+			status: CalendarAttendeeStatus.NEEDS_ACTION,
+			address: createEncryptedMailAddress({address: mailAddress}),
+		})
+		this.attendees.push(attendee)
 	}
 
 	_adjustEndTime() {
@@ -289,6 +317,22 @@ class EventViewModel {
 				break
 			}
 		}
+	}
+
+	canModifyGuests(): boolean {
+		return true // TODO
+	}
+
+	removeAttendee(guest: CalendarEventAttendee) {
+		remove(this.attendees, guest)
+	}
+
+	canModifyOwnAttendance(): boolean {
+		return true // TODO
+	}
+
+	canModifyOrganizer(): bool {
+		return true // TODO
 	}
 
 	/**
@@ -474,35 +518,12 @@ class EventViewModel {
 
 export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarInfo>, mailboxDetail: MailboxDetail,
                                         existingEvent?: CalendarEvent) {
-	const user = logins.getUserController().user
-	let calendarArray = Array.from(calendars.values())
-	let readOnly = false
-	const mailAddresses = getEnabledMailAddresses(mailboxDetail)
-	const attendees = existingEvent && existingEvent.attendees.slice() || []
-	const organizer = stream(existingEvent && existingEvent.organizer || getDefaultSenderFromUser())
-	const isOwnEvent = mailAddresses.includes(organizer())
-	// TODO: this should change dynamically depending on the selected calendar
-	let canModifyGuests = isOwnEvent
-	let canModifyOwnAttendance = true
-
-	if (!existingEvent) {
-		calendarArray = calendarArray.filter(calendarInfo => hasCapabilityOnGroup(user, calendarInfo.group, ShareCapability.Write))
-	} else {
-		// OwnerGroup is not set for invites
-		const calendarInfoForEvent = existingEvent._ownerGroup && calendars.get(existingEvent._ownerGroup)
-		if (calendarInfoForEvent) {
-			readOnly = !hasCapabilityOnGroup(logins.getUserController().user, calendarInfoForEvent.group, ShareCapability.Write)
-				|| calendarInfoForEvent.shared && attendees.length > 0
-			canModifyGuests = isOwnEvent && !calendarInfoForEvent.shared
-			canModifyOwnAttendance = !calendarInfoForEvent.shared
-		}
-	}
 
 	const viewModel = new EventViewModel(date, calendars, mailboxDetail, existingEvent)
 
 	const startOfTheWeekOffset = getStartOfTheWeekOffsetForUser()
-	const startDatePicker = new DatePicker(startOfTheWeekOffset, "dateFrom_label", "emptyString_msg", true, readOnly)
-	const endDatePicker = new DatePicker(startOfTheWeekOffset, "dateTo_label", "emptyString_msg", true, readOnly)
+	const startDatePicker = new DatePicker(startOfTheWeekOffset, "dateFrom_label", "emptyString_msg", true, viewModel.readOnly)
+	const endDatePicker = new DatePicker(startOfTheWeekOffset, "dateTo_label", "emptyString_msg", true, viewModel.readOnly)
 	startDatePicker.date.map((date) => viewModel.onStartDateSelected(date))
 	endDatePicker.date.map((date) => viewModel.onEndDateSelected(date))
 
@@ -546,13 +567,6 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 	}
 
 	const participationStatus = stream(CalendarAttendeeStatus.NEEDS_ACTION)
-	let ownAttendee
-	if (existingEvent && !isOwnEvent) {
-		ownAttendee = attendees.find(a => mailAddresses.includes(a.address.address))
-		participationStatus(ownAttendee ? getAttendeeStatus(ownAttendee) : CalendarAttendeeStatus.NEEDS_ACTION)
-	} else {
-		ownAttendee = null
-	}
 
 	const participationDropdownAttrs = {
 		// TODO: translate
@@ -580,7 +594,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		.setValue(existingEvent ? existingEvent.description : "")
 		.setMinHeight(400)
 		.showBorders()
-		.setEnabled(!readOnly)
+		.setEnabled(!viewModel.readOnly)
 
 	const okAction = (dialog) => {
 		if (viewModel.onOkPressed()) {
@@ -589,19 +603,13 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 	}
 
 	const attendeesField = makeAttendeesField((bubble) => {
-		const attendee = createCalendarEventAttendee({
-			status: CalendarAttendeeStatus.NEEDS_ACTION,
-			address: createEncryptedMailAddress({
-				address: bubble.entity.mailAddress
-			}),
-		})
-		attendees.push(attendee)
+		viewModel.addAttendee(bubble.entity.mailAddress)
 		remove(attendeesField.bubbles, bubble)
 	})
 
 	const attendeesExpanded = stream(false)
 
-	const renderInviting = (): Children => canModifyGuests ? m(attendeesField) : null
+	const renderInviting = (): Children => viewModel.canModifyGuests() ? m(attendeesField) : null
 
 	function renderAttendees() {
 		const iconForStatus = {
@@ -635,45 +643,30 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 				},
 				[renderStatusIcon(a), `${a.address.name || ""} ${a.address.address}`]
 			),
-			canModifyGuests
+			viewModel.canModifyGuests()
 				? m(ButtonN, {
 					label: "delete_action",
 					type: ButtonType.Action,
 					icon: () => Icons.Cancel,
-					click: () => {
-						remove(attendees, a)
-					}
+					click: () => viewModel.removeAttendee(a)
 				})
 				: null
 		])
 
-		return m(".pt-s", attendees.map(renderGuest))
+		return m(".pt-s", viewModel.attendees.map(renderGuest))
 	}
 
 	function renderOrganizer(): Children {
-		const disabled = readOnly || attendees.length > 0
-		const items = []
-		const selectedOrganizer = existingEvent && existingEvent.organizer
-		if (selectedOrganizer) {
-			items.push({name: selectedOrganizer, value: selectedOrganizer})
-		}
-		if (!disabled) {
-			mailAddresses.forEach((mailAddress) => {
-				if (mailAddress !== selectedOrganizer) {
-					items.push({name: mailAddress, value: mailAddress})
-				}
-			})
-		}
 		return m(DropDownSelectorN, {
 			label: "organizer_label",
-			items,
-			selectedValue: organizer,
+			items: viewModel.possibleOrgannizers.map((address) => ({name: address, value: address})),
+			selectedValue: stream(viewModel.organizer || null),
 			dropdownWidth: 300,
-			disabled,
+			disabled: !viewModel.canModifyOrganizer(),
 		})
 	}
 
-	const renderGoingSelector = () => m(DropDownSelectorN, Object.assign({}, participationDropdownAttrs, {disabled: !canModifyOwnAttendance}))
+	const renderGoingSelector = () => m(DropDownSelectorN, Object.assign({}, participationDropdownAttrs, {disabled: !viewModel.canModifyOwnAttendance()}))
 
 	const renderDateTimePickers = () => renderTwoColumnsIfFits(
 		[
@@ -683,7 +676,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 					value: viewModel.startTime,
 					onselected: (time) => viewModel.onStartTimeSelected(time),
 					amPmFormat: viewModel.amPmFormat,
-					disabled: readOnly
+					disabled: viewModel.readOnly
 				}))
 				: null
 		],
@@ -694,7 +687,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 					value: viewModel.endTime,
 					onselected: (time) => viewModel.onEndTimeSelected(time),
 					amPmFormat: viewModel.amPmFormat,
-					disabled: readOnly
+					disabled: viewModel.readOnly
 				}))
 				: null
 		]
@@ -703,7 +696,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 	const renderLocationField = () => m(TextFieldN, {
 		label: "location_label",
 		value: viewModel.location,
-		disabled: readOnly,
+		disabled: viewModel.readOnly,
 		injectionsRight: () => {
 			let address = encodeURIComponent(viewModel.location())
 			if (address === "") {
@@ -722,12 +715,12 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 	function renderCalendarPicker() {
 		return m(".flex-half.pl-s", m(DropDownSelectorN, ({
 			label: "calendar_label",
-			items: calendarArray.map((calendarInfo) => {
+			items: viewModel.calendars.map((calendarInfo) => {
 				return {name: getCalendarName(calendarInfo.groupInfo, calendarInfo.shared), value: calendarInfo}
 			}),
 			selectedValue: viewModel.selectedCalendar,
 			icon: BootIcons.Expand,
-			disabled: readOnly
+			disabled: viewModel.readOnly
 		}: DropDownSelectorAttrs<CalendarInfo>)))
 	}
 
@@ -745,7 +738,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 			selectedValue: repeatFrequencyStream(viewModel.repeat && viewModel.repeat.frequency || null),
 			selectionChangedHandler: (period) => viewModel.onRepeatPeriodSelected(period),
 			icon: BootIcons.Expand,
-			disabled: readOnly,
+			disabled: viewModel.readOnly,
 		})
 	}
 
@@ -756,7 +749,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 			selectedValue: repeatIntervalStream(viewModel.repeat && viewModel.repeat.interval || 1),
 			selectionChangedHandler: (period) => viewModel.onRepeatIntervalChanged(period),
 			icon: BootIcons.Expand,
-			disabled: readOnly
+			disabled: viewModel.readOnly
 		})
 	}
 
@@ -767,7 +760,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 				selectedValue: endTypeStream(repeat.endType),
 				selectionChangedHandler: (period) => viewModel.onRepeatEndTypeChanged(period),
 				icon: BootIcons.Expand,
-				disabled: readOnly,
+				disabled: viewModel.readOnly,
 			}
 		)
 	}
@@ -797,7 +790,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 				m(".flex.items-center", [
 					m(CheckboxN, {
 						checked: viewModel.allDay,
-						disabled: readOnly,
+						disabled: viewModel.readOnly,
 						label: () => lang.get("allDay_label")
 					}),
 					m(".flex-grow"),
@@ -823,7 +816,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 				),
 				renderRepeatRulePicker(),
 				m(".flex", [
-					readOnly
+					viewModel.readOnly
 						? null
 						: m(".flex.col.flex-half.pr-s",
 						[
@@ -860,7 +853,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		}
 	]
 
-	const renderMoreButton = () => (existingEvent && existingEvent._id && !readOnly)
+	const renderMoreButton = () => (existingEvent && existingEvent._id && !viewModel.readOnly)
 		? m(".mr-negative-s", m(ButtonN, attachDropdown({
 			label: "more_label",
 			icon: () => Icons.More,
@@ -872,7 +865,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 			m(TextFieldN, {
 				label: "title_placeholder",
 				value: viewModel.summary,
-				disabled: readOnly,
+				disabled: viewModel.readOnly,
 				class: "big-input pt flex-grow mr-s"
 			}),
 			renderMoreButton(),
