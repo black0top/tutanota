@@ -37,7 +37,6 @@ import {logins} from "../api/main/LoginController"
 
 export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarInfo>, mailboxDetail: MailboxDetail,
                                         existingEvent?: CalendarEvent) {
-
 	const viewModel = new CalendarEventViewModel(date, calendars, mailboxDetail, logins.getUserController(), existingEvent)
 
 	const startOfTheWeekOffset = getStartOfTheWeekOffsetForUser()
@@ -83,20 +82,6 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		} else {
 			return null
 		}
-	}
-
-	const participationStatus = stream(CalendarAttendeeStatus.NEEDS_ACTION)
-
-	const participationDropdownAttrs = {
-		// TODO: translate
-		label: () => "Going?",
-		items: [
-			{name: lang.get("noSelection_msg"), value: CalendarAttendeeStatus.NEEDS_ACTION, selectable: false},
-			{name: lang.get("yes_label"), value: CalendarAttendeeStatus.ACCEPTED},
-			{name: lang.get("maybe_label"), value: CalendarAttendeeStatus.TENTATIVE},
-			{name: lang.get("no_label"), value: CalendarAttendeeStatus.DECLINED},
-		],
-		selectedValue: participationStatus,
 	}
 
 	const editorOptions = {enabled: false, alignmentEnabled: false, fontSizeEnabled: false}
@@ -185,7 +170,18 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		})
 	}
 
-	const renderGoingSelector = () => m(DropDownSelectorN, Object.assign({}, participationDropdownAttrs, {disabled: !viewModel.canModifyOwnAttendance()}))
+	const renderGoingSelector = () => m(DropDownSelectorN, Object.assign({}, {
+		// TODO: translate
+		label: () => "Going?",
+		items: [
+			{name: lang.get("noSelection_msg"), value: CalendarAttendeeStatus.NEEDS_ACTION, selectable: false},
+			{name: lang.get("yes_label"), value: CalendarAttendeeStatus.ACCEPTED},
+			{name: lang.get("maybe_label"), value: CalendarAttendeeStatus.TENTATIVE},
+			{name: lang.get("no_label"), value: CalendarAttendeeStatus.DECLINED},
+		],
+		selectedValue: stream(viewModel.going),
+		selectionChangedHandler: (going) => viewModel.selectGoing(going)
+	}, {disabled: !viewModel.canModifyOwnAttendance()}))
 
 	const renderDateTimePickers = () => renderTwoColumnsIfFits(
 		[

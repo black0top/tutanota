@@ -1,6 +1,6 @@
 //@flow
 import type {CalendarInfo} from "./CalendarView"
-import type {AlarmIntervalEnum, EndTypeEnum, RepeatPeriodEnum} from "../api/common/TutanotaConstants"
+import type {AlarmIntervalEnum, CalendarAttendeeStatusEnum, EndTypeEnum, RepeatPeriodEnum} from "../api/common/TutanotaConstants"
 import {CalendarAttendeeStatus, EndType, RepeatPeriod, TimeFormat} from "../api/common/TutanotaConstants"
 import type {CalendarEventAttendee} from "../api/entities/tutanota/CalendarEventAttendee"
 import {createCalendarEventAttendee} from "../api/entities/tutanota/CalendarEventAttendee"
@@ -11,7 +11,6 @@ import {createAlarmInfo} from "../api/entities/sys/AlarmInfo"
 import type {MailboxDetail} from "../mail/MailModel"
 import stream from "mithril/stream/stream.js"
 import {getDefaultSenderFromUser} from "../mail/MailUtils"
-import {logins} from "../api/main/LoginController"
 import {
 	assignEventId,
 	createRepeatRuleWithValues,
@@ -40,7 +39,6 @@ import {NotFoundError} from "../api/common/error/RestError"
 import {worker} from "../api/main/WorkerClient"
 import {sendCalendarCancellation, sendCalendarInvite, sendCalendarUpdate} from "./CalendarInvites"
 import type {CalendarRepeatRule} from "../api/entities/tutanota/CalendarRepeatRule"
-import {UserController} from "../api/main/UserController"
 
 const TIMESTAMP_ZERO_YEAR = 1970
 
@@ -66,6 +64,7 @@ export class CalendarEventViewModel {
 	+_zone: string;
 	// We keep alarms read-only so that view can diff just array and not all elements
 	alarms: $ReadOnlyArray<AlarmInfo>;
+	going: CalendarAttendeeStatusEnum;
 
 	constructor(date: Date, calendars: Map<Id, CalendarInfo>, mailboxDetail: MailboxDetail, userController: IUserController,
 	            existingEvent?: CalendarEvent) {
@@ -86,6 +85,7 @@ export class CalendarEventViewModel {
 		this.endDate = getStartOfDayWithZone(date, this._zone)
 		this.alarms = []
 		this.readOnly = false // TODO
+		this.going = CalendarAttendeeStatus.NEEDS_ACTION; // TODO
 
 		/**
 		 * Capability for events is fairly complicated:
@@ -491,6 +491,12 @@ export class CalendarEventViewModel {
 				})
 		})
 		return true
+	}
+
+	selectGoing(going: CalendarAttendeeStatusEnum) {
+		if (this.canModifyOwnAttendance()) {
+			this.going = going
+		}
 	}
 }
 
