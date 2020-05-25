@@ -359,12 +359,27 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 		)
 	}
 
+	function deleteEvent() {
+		if (viewModel.existingEvent == null) {
+			return Promise.resolve(true)
+		}
+		const p = viewModel.repeat
+			? Dialog.confirm("deleteRepeatingEventConfirmation_msg")
+			: Promise.resolve(true)
+		return p.then((answer) => {
+			if (answer) {
+				viewModel.deleteEvent()
+				dialog.close()
+			}
+		})
+	}
+
 	const moreButtonActions = () => [
 		{
 			label: "delete_action",
 			type: ButtonType.Dropdown,
 			icon: () => Icons.Trash,
-			click: () => {viewModel.deleteEvent()}
+			click: () => deleteEvent()
 		}
 	]
 

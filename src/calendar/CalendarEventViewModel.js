@@ -34,11 +34,14 @@ import m from "mithril"
 import {createEncryptedMailAddress} from "../api/entities/tutanota/EncryptedMailAddress"
 import {remove} from "../api/common/utils/ArrayUtils"
 import {Dialog} from "../gui/base/Dialog"
-import {erase} from "../api/main/Entity"
+import {erase, load} from "../api/main/Entity"
 import {NotFoundError} from "../api/common/error/RestError"
 import {worker} from "../api/main/WorkerClient"
 import {sendCalendarCancellation, sendCalendarInvite, sendCalendarUpdate} from "./CalendarInvites"
 import type {CalendarRepeatRule} from "../api/entities/tutanota/CalendarRepeatRule"
+import {isSameId, listIdPart} from "../api/common/EntityFunctions"
+import {UserAlarmInfoTypeRef} from "../api/entities/sys/UserAlarmInfo"
+import type {User} from "../api/entities/sys/User"
 
 const TIMESTAMP_ZERO_YEAR = 1970
 
@@ -65,6 +68,7 @@ export class CalendarEventViewModel {
 	// We keep alarms read-only so that view can diff just array and not all elements
 	alarms: $ReadOnlyArray<AlarmInfo>;
 	going: CalendarAttendeeStatusEnum;
+	_user: User;
 
 	constructor(date: Date, calendars: Map<Id, CalendarInfo>, mailboxDetail: MailboxDetail, userController: IUserController,
 	            existingEvent?: CalendarEvent) {
@@ -86,6 +90,7 @@ export class CalendarEventViewModel {
 		this.alarms = []
 		this.readOnly = false // TODO
 		this.going = CalendarAttendeeStatus.NEEDS_ACTION; // TODO
+		this._user = userController.user
 
 		/**
 		 * Capability for events is fairly complicated:
@@ -158,14 +163,13 @@ export class CalendarEventViewModel {
 			this.note(existingEvent.description)
 
 			// TODO: alarms
-			// for (let alarmInfoId of existingEvent.alarmInfos) {
-			// 	if (isSameId(listIdPart(alarmInfoId), neverNull(user.alarmInfoList).alarms)) {
-			// 		load(UserAlarmInfoTypeRef, alarmInfoId).then((userAlarmInfo) => {
-			// 			lastThrow(alarmPickerAttrs).selectedValue(downcast(userAlarmInfo.alarmInfo.trigger))
-			// 			m.redraw()
-			// 		})
-			// 	}
-			// }
+			for (let alarmInfoId of existingEvent.alarmInfos) {
+				if (isSameId(listIdPart(alarmInfoId), neverNull(this._user.alarmInfoList).alarms)) {
+					load(UserAlarmInfoTypeRef, alarmInfoId).then((userAlarmInfo) => {
+						this.addAlarm(downcast(userAlarmInfo.alarmInfo.trigger))
+					})
+				}
+			}
 		} else {
 			const endTimeDate = new Date(date)
 			endTimeDate.setMinutes(endTimeDate.getMinutes() + 30)
@@ -317,22 +321,11 @@ export class CalendarEventViewModel {
 	 * @return Promise<bool> whether to close dialog
 	 */
 	deleteEvent(): Promise<bool> {
-		if (this.existingEvent == null) {
-			return Promise.resolve(true)
-		}
-		const p = this.existingEvent.repeatRule
-			? Dialog.confirm("deleteRepeatingEventConfirmation_msg")
-			: Promise.resolve(true)
-		return p.then((answer) => {
-			if (answer) {
-				// TODO: invite
-				// if (isOwnEvent && existingEvent.attendees.length) {
-				// 	sendCalendarCancellation(existingEvent, existingEvent.attendees.map(a => a.address))
-				// }
-				erase(this.existingEvent).catch(NotFoundError, noOp)
-			}
-			return answer
-		})
+		// TODO: invite
+		// if (isOwnEvent && existingEvent.attendees.length) {
+		// 	sendCalendarCancellation(existingEvent, existingEvent.attendees.map(a => a.address))
+		// }
+		return erase(this.existingEvent).catch(NotFoundError, noOp)
 	}
 
 	onOkPressed(): boolean {
@@ -406,15 +399,7 @@ export class CalendarEventViewModel {
 				}
 			}
 		}
-		const newAlarms = []
-		// TODO: alarms
-		// for (let pickerAttrs of alarmPickerAttrs) {
-		// 	const alarmValue = pickerAttrs.selectedValue()
-		// 	if (alarmValue) {
-		// 		const newAlarm = createCalendarAlarm(generateEventElementId(Date.now()), alarmValue)
-		// 		newAlarms.push(newAlarm)
-		// 	}
-		// }
+		const newAlarms = this.alarms.slice()
 		newEvent.attendees = this.attendees
 		if (this.existingEvent) {
 			newEvent.sequence = String(filterInt(this.existingEvent.sequence) + 1)
