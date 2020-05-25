@@ -187,10 +187,11 @@ export function isExcludedMailAddress(mailAddress: string) {
 /**
  * @return {string} default mail address
  */
-export function getDefaultSenderFromUser(): string {
-	let props = logins.getUserController().props
+export function getDefaultSenderFromUser({props, userGroupInfo}: IUserController): string {
 	return (props.defaultSender
-		&& contains(getEnabledMailAddressesForGroupInfo(logins.getUserController().userGroupInfo), props.defaultSender)) ? props.defaultSender : neverNull(logins.getUserController().userGroupInfo.mailAddress)
+		&& contains(getEnabledMailAddressesForGroupInfo(userGroupInfo), props.defaultSender))
+		? props.defaultSender
+		: neverNull(userGroupInfo.mailAddress)
 }
 
 export function getDefaultSignature() {

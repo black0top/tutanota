@@ -97,8 +97,36 @@ type StreamModule = {
 declare module 'mithril/stream/stream.js' {
 	declare export default StreamModule;
 }
+
+type ComparisonDescriptor = (string) => void;
+type DoneFn = () => void;
+type TimeoutFn = (number) => void;
+
+interface Ospec {
+	<T>(T): {
+		equals: (T) => ComparisonDescriptor,
+		deepEquals: (T) => ComparisonDescriptor,
+		notEquals: (T) => ComparisonDescriptor,
+		notDeepEquals: (T) => ComparisonDescriptor,
+		// Throws can be used when function is passed but Flow can't distinguish them currently
+		throws: (Class<any>) => void
+	};
+
+	(string, (done: () => void, timeout: (number) => void) => mixed): void;
+
+	spec: (string, () => mixed) => void;
+	only: (string, () => mixed) => void;
+	before: ((DoneFn, TimeoutFn) => mixed) => void;
+	after: ((DoneFn, TimeoutFn) => mixed) => void;
+	beforeEach: ((DoneFn, TimeoutFn) => mixed) => void;
+	afterEach: ((DoneFn, TimeoutFn) => mixed) => void;
+	// stub
+	spy: (any) => any;
+	specTimeout: (number) => void;
+}
+
 declare module 'ospec/ospec.js' {
-	declare export default any;
+	declare export default Ospec;
 }
 
 declare module 'mockery' {

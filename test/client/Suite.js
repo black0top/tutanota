@@ -20,6 +20,7 @@ import "./calendar/CalendarModelTest"
 import "./calendar/CalendarUtilsTest"
 import "./calendar/CalendarParsertest"
 import "./calendar/CalendarImporterTest"
+import "./calendar/CalendarEventViewModelTest"
 
 import o from "ospec/ospec.js"
 

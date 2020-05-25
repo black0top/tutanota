@@ -55,7 +55,7 @@ export class MailSettingsViewer implements UpdatableSettingsViewer {
 	_identifierListViewer: IdentifierListViewer;
 
 	constructor() {
-		this._defaultSender = stream(getDefaultSenderFromUser())
+		this._defaultSender = stream(getDefaultSenderFromUser(logins.getUserController()))
 		this._senderName = stream(logins.getUserController().userGroupInfo.name)
 		this._signature = stream(EditSignatureDialog.getSignatureType(logins.getUserController().props).name)
 		this._defaultUnconfidential = stream(logins.getUserController().props.defaultUnconfidential)

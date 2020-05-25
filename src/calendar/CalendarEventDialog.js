@@ -163,7 +163,7 @@ export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarI
 	function renderOrganizer(): Children {
 		return m(DropDownSelectorN, {
 			label: "organizer_label",
-			items: viewModel.possibleOrgannizers.map((address) => ({name: address, value: address})),
+			items: viewModel.possibleOrganizers.map((address) => ({name: address, value: address})),
 			selectedValue: stream(viewModel.organizer || null),
 			dropdownWidth: 300,
 			disabled: !viewModel.canModifyOrganizer(),
