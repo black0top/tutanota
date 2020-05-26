@@ -7,41 +7,25 @@ import type {MailboxDetail} from "../../../src/mail/MailModel"
 import {createCalendarEvent} from "../../../src/api/entities/tutanota/CalendarEvent"
 import {createGroupInfo} from "../../../src/api/entities/sys/GroupInfo"
 import {TimeFormat} from "../../../src/api/common/TutanotaConstants"
+import type {CalendarInfo} from "../../../src/calendar/CalendarView"
+
+const calendarOwnerGroup = "0"
 
 o.spec("CalendarEventViewModel", function () {
-	o.only("init with existing event", function () {
-		const now = new Date(2020, 4, 25, 13, 40)
-		const calendarInfo = {
-			groupRoot: downcast({}),
-			longEvents: new LazyLoaded(() => Promise.resolve([])),
-			groupInfo: downcast({}),
-			group: downcast({}),
-			shared: false
-		}
-		const calendars = new Map([["0", calendarInfo]])
-		const mailboxDetail: MailboxDetail = downcast({})
-		const userController: IUserController = downcast({
-			user: null,
-			props: {
-				defaultSender: "address@tutanota.com",
-			},
-			userGroupInfo: createGroupInfo({
-				mailAddressAliases: [],
-				mailAddress: "address@tutanota.com",
-			}),
-			userSettingsGroupRoot: {
-				timeFormat: TimeFormat.TWENTY_FOUR_HOURS,
-			}
-		})
+	const now = new Date(2020, 4, 25, 13, 40)
 
+	o("init with existing event", function () {
+		const calendars = makeCalendars("own")
+		const mailboxDetail: MailboxDetail = downcast({})
+		const userController: IUserController = makeUserController()
 		const existingEvent = createCalendarEvent({
 			summary: "existing event",
 			startTime: new Date(2020, 4, 26, 12),
 			endTime: new Date(2020, 4, 26, 13),
 			description: "note",
 			location: "location",
+			_ownerGroup: calendarOwnerGroup,
 		})
-
 		const viewModel = new CalendarEventViewModel(now, calendars, mailboxDetail, userController, existingEvent)
 
 		o(viewModel.summary()).equals(existingEvent.summary)
@@ -51,5 +35,78 @@ o.spec("CalendarEventViewModel", function () {
 		o(viewModel.endTime).equals("13:00")
 		o(viewModel.note()).equals(existingEvent.description)
 		o(viewModel.location).equals(existingEvent.location)
+		o(viewModel.readOnly).equals(false)
+	})
+
+	o("can edit if it's invite in our own calendar", function () {
+		const calendars = makeCalendars("own")
+		const mailboxDetail: MailboxDetail = downcast({})
+		const userController: IUserController = makeUserController()
+		const existingEvent = createCalendarEvent({
+			summary: "existing event",
+			startTime: new Date(2020, 4, 26, 12),
+			endTime: new Date(2020, 4, 26, 13),
+			organizer: "another-user@provider.com",
+			_ownerGroup: calendarOwnerGroup,
+		})
+		const viewModel = new CalendarEventViewModel(now, calendars, mailboxDetail, userController, existingEvent)
+		o(viewModel.readOnly).equals(false)
+	})
+
+	o("can edit if it's a new invite (without calendar)", function () {
+		const calendars = makeCalendars("own")
+		const mailboxDetail: MailboxDetail = downcast({})
+		const userController = makeUserController()
+		const existingEvent = createCalendarEvent({
+			summary: "existing event",
+			startTime: new Date(2020, 4, 26, 12),
+			endTime: new Date(2020, 4, 26, 13),
+			organizer: "another-user@provider.com",
+			_ownerGroup: null,
+		})
+		const viewModel = new CalendarEventViewModel(now, calendars, mailboxDetail, userController, existingEvent)
+		o(viewModel.readOnly).equals(false)
+	})
+
+	o("cannot edit if it's invite in another calendar", function () {
+		const calendars = makeCalendars("shared")
+		const mailboxDetail = downcast({})
+		const userController = makeUserController()
+		const existingEvent = createCalendarEvent({
+			summary: "existing event",
+			startTime: new Date(2020, 4, 26, 12),
+			endTime: new Date(2020, 4, 26, 13),
+			organizer: "another-user@provider.com",
+			_ownerGroup: calendarOwnerGroup,
+		})
+		const viewModel = new CalendarEventViewModel(now, calendars, mailboxDetail, userController, existingEvent)
+		o(viewModel.readOnly).equals(true)
 	})
 })
+
+function makeCalendars(type: "own" | "shared"): Map<string, CalendarInfo> {
+	const calendarInfo = {
+		groupRoot: downcast({}),
+		longEvents: new LazyLoaded(() => Promise.resolve([])),
+		groupInfo: downcast({}),
+		group: downcast({}),
+		shared: type === "shared"
+	}
+	return new Map([[calendarOwnerGroup, calendarInfo]])
+}
+
+function makeUserController(): IUserController {
+	return downcast({
+		user: null,
+		props: {
+			defaultSender: "address@tutanota.com",
+		},
+		userGroupInfo: createGroupInfo({
+			mailAddressAliases: [],
+			mailAddress: "address@tutanota.com",
+		}),
+		userSettingsGroupRoot: {
+			timeFormat: TimeFormat.TWENTY_FOUR_HOURS,
+		}
+	})
+}

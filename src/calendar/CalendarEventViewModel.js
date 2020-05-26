@@ -85,7 +85,6 @@ export class CalendarEventViewModel {
 		this.existingEvent = existingEvent
 		this._zone = getTimeZone()
 		this.alarms = []
-		this.readOnly = false // TODO
 		this.going = CalendarAttendeeStatus.NEEDS_ACTION; // TODO
 		this._user = userController.user
 
@@ -97,9 +96,27 @@ export class CalendarEventViewModel {
 		 * |----------|-----------|---------
 		 * | Personal | Self      | everything
 		 * | Personal | Other     | everything (local copy of shared event)
-		 * | Shared   | Self      | everything
+		 * | Shared   | Self      | cannot edit - it might be calendar owner's version of the event
 		 * | Shared   | Other     | cannot modify if there are guests
 		 */
+
+		if (!existingEvent) {
+			this.readOnly = false
+		} else {
+			// OwnerGroup is not set for invites
+			const calendarInfoForEvent = existingEvent._ownerGroup && calendars.get(existingEvent._ownerGroup)
+			if (calendarInfoForEvent) {
+				this.readOnly = calendarInfoForEvent.shared
+				// readOnly = !hasCapabilityOnGroup(logins.getUserController().user, calendarInfoForEvent.group, ShareCapability.Write)
+				// 	|| calendarInfoForEvent.shared && attendees.length > 0
+				// canModifyGuests = isOwnEvent && !calendarInfoForEvent.shared
+				// canModifyOwnAttendance = !calendarInfoForEvent.shared
+			} else {
+				// We can edit new invites (from files)
+				this.readOnly = false
+			}
+		}
+
 
 		// TODO: re-do this capability things, some of them should be dynamic
 		// const user = logins.getUserController().user
