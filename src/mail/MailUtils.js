@@ -32,7 +32,6 @@ import type {MailAddress} from "../api/entities/tutanota/MailAddress"
 import {createMailAddress} from "../api/entities/tutanota/MailAddress"
 import {Icons} from "../gui/base/icons/Icons"
 import type {MailboxDetail} from "./MailModel"
-import {mailModel} from "./MailModel"
 import {getContactDisplayName, searchForContactByMailAddress} from "../contacts/ContactUtils"
 import {Dialog} from "../gui/base/Dialog"
 import type {AllIconsEnum, lazyIcon} from "../gui/base/Icon"
@@ -44,6 +43,7 @@ import type {Mail} from "../api/entities/tutanota/Mail"
 import type {MailFolder} from "../api/entities/tutanota/MailFolder"
 import type {File as TutanotaFile} from "../api/entities/tutanota/File"
 import type {GroupInfo} from "../api/entities/sys/GroupInfo"
+import {locator} from "../api/main/MainLocator"
 
 assertMainOrNode()
 
@@ -398,7 +398,7 @@ export function isFinalDelete(folder: ?MailFolder): boolean {
 
 export function showDeleteConfirmationDialog(mails: Mail[]): Promise<boolean> {
 	let groupedMails = mails.reduce((all, mail) => {
-		isFinalDelete(mailModel.getMailFolder(mail._id[0])) ? all.trash.push(mail) : all.move.push(mail)
+		isFinalDelete(locator.mailModel.getMailFolder(mail._id[0])) ? all.trash.push(mail) : all.move.push(mail)
 		return all
 	}, {trash: [], move: []})
 
@@ -450,7 +450,7 @@ export function getMailboxName(mailboxDetails: MailboxDetail): string {
 }
 
 export function getMailFolderIcon(mail: Mail): AllIconsEnum {
-	let folder = mailModel.getMailFolder(mail._id[0])
+	let folder = locator.mailModel.getMailFolder(mail._id[0])
 	if (folder) {
 		return getFolderIcon(folder)()
 	} else {
@@ -547,8 +547,8 @@ export function replaceInlineImagesWithCids(dom: HTMLElement): HTMLElement {
 export function archiveMails(mails: Mail[]): Promise<*> {
 	if (mails.length > 0) {
 		// assume all mails in the array belong to the same Mailbox
-		return mailModel.getMailboxFolders(mails[0])
-		                .then((folders) => mailModel.moveMails(mails, getArchiveFolder(folders)))
+		return locator.mailModel.getMailboxFolders(mails[0])
+		              .then((folders) => locator.mailModel.moveMails(mails, getArchiveFolder(folders)))
 	} else {
 		return Promise.resolve()
 	}
@@ -557,8 +557,8 @@ export function archiveMails(mails: Mail[]): Promise<*> {
 export function moveToInbox(mails: Mail[]): Promise<*> {
 	if (mails.length > 0) {
 		// assume all mails in the array belong to the same Mailbox
-		return mailModel.getMailboxFolders(mails[0])
-		                .then((folders) => mailModel.moveMails(mails, getInboxFolder(folders)))
+		return locator.mailModel.getMailboxFolders(mails[0])
+		              .then((folders) => locator.mailModel.moveMails(mails, getInboxFolder(folders)))
 	} else {
 		return Promise.resolve()
 	}

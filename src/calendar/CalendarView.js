@@ -80,7 +80,6 @@ import {LazyLoaded} from "../api/common/utils/LazyLoaded"
 import type {CalendarGroupRoot} from "../api/entities/tutanota/CalendarGroupRoot"
 import type {GroupInfo} from "../api/entities/sys/GroupInfo"
 import {GroupInfoTypeRef} from "../api/entities/sys/GroupInfo"
-import {mailModel} from "../mail/MailModel"
 
 export const LIMIT_PAST_EVENTS_YEARS = 100
 export const DEFAULT_HOUR_OF_DAY = 6
@@ -637,7 +636,7 @@ export class CalendarView implements CurrentView {
 	}
 
 	_onEventSelected(event: CalendarEvent) {
-		Promise.all([this._calendarInfos, mailModel.getUserMailboxDetails()])
+		Promise.all([this._calendarInfos, locator.mailModel.getUserMailboxDetails()])
 		       .then(([calendarInfos, mailboxDetails]) => {
 			       let p = Promise.resolve(event)
 			       if (event.repeatRule) {
@@ -697,7 +696,7 @@ export class CalendarView implements CurrentView {
 		}
 		Promise.all([
 			this._calendarInfos.isFulfilled() ? this._calendarInfos : showProgressDialog("pleaseWait_msg", this._calendarInfos),
-			mailModel.getUserMailboxDetails()
+			locator.mailModel.getUserMailboxDetails()
 		]).then(([calendars, mailboxDetails]) => showCalendarEventDialog(dateToUse, calendars, mailboxDetails))
 	}
 

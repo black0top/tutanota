@@ -42,6 +42,7 @@ import {isSameId, listIdPart} from "../api/common/EntityFunctions"
 import {UserAlarmInfoTypeRef} from "../api/entities/sys/UserAlarmInfo"
 import type {User} from "../api/entities/sys/User"
 import {incrementDate} from "../api/common/utils/DateUtils"
+import type {CalendarUpdateDistributor} from "./CalendarUpdateDistributor"
 
 const TIMESTAMP_ZERO_YEAR = 1970
 
@@ -70,9 +71,17 @@ export class CalendarEventViewModel {
 	going: CalendarAttendeeStatusEnum;
 	_user: User;
 	+_isInSharedCalendar: boolean;
+	+_distributor: CalendarUpdateDistributor;
 
-	constructor(date: Date, calendars: Map<Id, CalendarInfo>, mailboxDetail: MailboxDetail, userController: IUserController,
-	            existingEvent?: CalendarEvent) {
+	constructor(
+		userController: IUserController,
+		distributor: CalendarUpdateDistributor,
+		mailboxDetail: MailboxDetail,
+		date: Date,
+		calendars: Map<Id, CalendarInfo>,
+		existingEvent?: CalendarEvent
+	) {
+		this._distributor = distributor
 		this.summary = stream("")
 		this.calendars = Array.from(calendars.values())
 		this.selectedCalendar = stream(this.calendars[0])

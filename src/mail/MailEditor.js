@@ -75,7 +75,6 @@ import type {MailAddress} from "../api/entities/tutanota/MailAddress"
 import {createMailAddress} from "../api/entities/tutanota/MailAddress"
 import {showProgressDialog} from "../gui/base/ProgressDialog"
 import type {MailboxDetail} from "./MailModel"
-import {mailModel} from "./MailModel"
 import {locator} from "../api/main/MainLocator"
 import {LazyContactListId} from "../contacts/ContactUtils"
 import {RecipientNotResolvedError} from "../api/common/error/RecipientNotResolvedError"
@@ -1218,7 +1217,7 @@ export class MailEditor {
 	}
 
 	static writeSupportMail() {
-		mailModel.init().then(() => {
+		locator.mailModel.init().then(() => {
 			if (!logins.getUserController().isPremiumAccount()) {
 				const message = lang.get("premiumOffer_msg", {"{1}": formatPrice(1, true)})
 				const title = lang.get("upgradeReminderTitle_msg")
@@ -1229,7 +1228,7 @@ export class MailEditor {
 				})
 				return
 			}
-			return mailModel.getUserMailboxDetails().then((mailboxDetails) => {
+			return locator.mailModel.getUserMailboxDetails().then((mailboxDetails) => {
 				const editor = new MailEditor(mailboxDetails)
 				let signature = "<br><br>--"
 				signature += "<br>Client: " + client.getIdentifier()
@@ -1245,7 +1244,7 @@ export class MailEditor {
 	}
 
 	static writeInviteMail() {
-		mailModel.getUserMailboxDetails().then((mailboxDetails) => {
+		locator.mailModel.getUserMailboxDetails().then((mailboxDetails) => {
 			const editor = new MailEditor(mailboxDetails)
 			const username = logins.getUserController().userGroupInfo.name;
 			const body = lang.get("invitationMailBody_msg", {

@@ -44,7 +44,6 @@ import type {CalendarGroupRoot} from "../api/entities/tutanota/CalendarGroupRoot
 import {CalendarGroupRootTypeRef} from "../api/entities/tutanota/CalendarGroupRoot"
 import {GroupInfoTypeRef} from "../api/entities/sys/GroupInfo"
 import type {CalendarInfo} from "./CalendarView"
-import {mailModel} from "../mail/MailModel"
 import {FileTypeRef} from "../api/entities/tutanota/File"
 import type {ParsedCalendarData} from "./CalendarImporter"
 import {parseCalendarFile} from "./CalendarImporter"
@@ -351,7 +350,8 @@ class CalendarModel {
 	}
 
 	_processCalendarReplies() {
-		return mailModel.getUserMailboxDetails().then((mailboxDetails) => {
+		// TOOD: inject mailModel
+		return locator.mailModel.getUserMailboxDetails().then((mailboxDetails) => {
 			loadAll(CalendarEventUpdateTypeRef, neverNull(mailboxDetails.mailboxGroupRoot.calendarEventUpdates).list)
 				.then((invites) => {
 					return Promise.each(invites, (invite) => {

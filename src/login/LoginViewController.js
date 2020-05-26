@@ -27,7 +27,6 @@ import {deviceConfig} from "../misc/DeviceConfig"
 import {client} from "../misc/ClientDetector"
 import {secondFactorHandler} from "./SecondFactorHandler"
 import {showProgressDialog} from "../gui/base/ProgressDialog"
-import {mailModel} from "../mail/MailModel"
 import {themeId} from "../gui/theme"
 import {changeColorTheme} from "../native/SystemApp"
 import {CancelledError} from "../api/common/error/CancelledError"
@@ -40,6 +39,7 @@ import {HttpMethod} from "../api/common/EntityFunctions"
 import {TutanotaService} from "../api/entities/tutanota/Services"
 import {formatPrice} from "../subscription/SubscriptionUtils"
 import {calendarModel} from "../calendar/CalendarModel"
+import {locator} from "../api/main/MainLocator"
 
 assertMainOrNode()
 
@@ -217,7 +217,7 @@ export class LoginViewController implements ILoginViewController {
 			})
 			.then(() => {
 				if (!isAdminClient()) {
-					return mailModel.init()
+					return locator.mailModel.init()
 				}
 			})
 			.then(() => logins.loginComplete()).then(() => {

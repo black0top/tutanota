@@ -1,9 +1,6 @@
 //@flow
-
-
 import type {Recipients} from "../mail/MailEditor"
 import {MailEditor} from "../mail/MailEditor"
-import {mailModel} from "../mail/MailModel"
 import {getDefaultSender, getEnabledMailAddresses} from "../mail/MailUtils"
 import {getCalendarName} from "./CalendarUtils"
 import type {TranslationKey} from "../misc/LanguageViewModel"
@@ -16,10 +13,10 @@ import type {ReceivedGroupInvitation} from "../api/entities/sys/ReceivedGroupInv
 import type {GroupMember} from "../api/entities/sys/GroupMember"
 import type {Group} from "../api/entities/sys/Group"
 import type {SentGroupInvitation} from "../api/entities/sys/SentGroupInvitation"
-
+import {locator} from "../api/main/MainLocator"
 
 export function sendShareNotificationEmail(sharedGroupInfo: GroupInfo, recipients: Array<RecipientInfo>) {
-	mailModel.getUserMailboxDetails().then((mailboxDetails) => {
+	locator.mailModel.getUserMailboxDetails().then((mailboxDetails) => {
 		const senderMailAddress = getDefaultSender(mailboxDetails)
 		const replacements = {
 			// Sender is displayed like Name <mail.address@tutanota.com>. Less-than and greater-than must be encoded for HTML
@@ -59,7 +56,7 @@ export function sendRejectNotificationEmail(invitation: ReceivedGroupInvitation)
 
 function _sendNotificationEmail(recipients: Recipients, subject: TranslationKey, body: TranslationKey, senderMailAddress: string,
                                 replacements: {[string]: string}) {
-	mailModel.getUserMailboxDetails().then((mailboxDetails) => {
+	locator.mailModel.getUserMailboxDetails().then((mailboxDetails) => {
 		const editor = new MailEditor(mailboxDetails)
 		const sender = getEnabledMailAddresses(mailboxDetails).includes(senderMailAddress)
 			? senderMailAddress

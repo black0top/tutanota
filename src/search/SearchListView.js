@@ -20,7 +20,6 @@ import {worker} from "../api/main/WorkerClient"
 import {logins} from "../api/main/LoginController"
 import {hasMoreResults} from "./SearchModel"
 import {archiveMails, moveToInbox, showDeleteConfirmationDialog} from "../mail/MailUtils"
-import {mailModel} from "../mail/MailModel"
 import {Dialog} from "../gui/base/Dialog"
 import type {Mail} from "../api/entities/tutanota/Mail"
 import type {Contact} from "../api/entities/tutanota/Contact"
@@ -339,7 +338,7 @@ export class SearchListView {
 							// is needed for correct selection behavior on mobile
 							this.selectNone()
 						}
-						mailModel.deleteMails(selectedMails)
+						locator.mailModel.deleteMails(selectedMails)
 					}
 				})
 			} else if (isSameTypeRef(selected[0].entry._type, ContactTypeRef)) {

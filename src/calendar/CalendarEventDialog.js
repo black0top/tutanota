@@ -32,12 +32,11 @@ import {BootIcons} from "../gui/base/icons/BootIcons"
 import {CheckboxN} from "../gui/base/CheckboxN"
 import {ExpanderButtonN, ExpanderPanelN} from "../gui/base/ExpanderN"
 import {client} from "../misc/ClientDetector"
-import {CalendarEventViewModel} from "./CalendarEventViewModel"
-import {logins} from "../api/main/LoginController"
+import {locator} from "../api/main/MainLocator"
 
 export function showCalendarEventDialog(date: Date, calendars: Map<Id, CalendarInfo>, mailboxDetail: MailboxDetail,
                                         existingEvent?: CalendarEvent) {
-	const viewModel = new CalendarEventViewModel(date, calendars, mailboxDetail, logins.getUserController(), existingEvent)
+	const viewModel = locator.calendarEventViewModel(date, calendars, mailboxDetail, existingEvent)
 
 	const startOfTheWeekOffset = getStartOfTheWeekOffsetForUser()
 	const startDatePicker = new DatePicker(startOfTheWeekOffset, "dateFrom_label", "emptyString_msg", true, viewModel.readOnly)

@@ -9,11 +9,12 @@ import ColumnEmptyMessageBox from "../gui/base/ColumnEmptyMessageBox"
 import {SearchListView} from "./SearchListView"
 import {erase, load, update} from "../api/main/Entity"
 import type {MailboxDetail} from "../mail/MailModel"
-import {mailModel} from "../mail/MailModel"
 import {NotFoundError} from "../api/common/error/RestError"
 import {getListId, isSameTypeRef} from "../api/common/EntityFunctions"
+import type {Contact} from "../api/entities/tutanota/Contact"
 import {ContactTypeRef} from "../api/entities/tutanota/Contact"
 import {Dialog} from "../gui/base/Dialog"
+import type {Mail} from "../api/entities/tutanota/Mail"
 import {MailTypeRef} from "../api/entities/tutanota/Mail"
 import {getFolderIcon, getFolderName, getSortedCustomFolders, getSortedSystemFolders} from "../mail/MailUtils"
 import {showProgressDialog} from "../gui/base/ProgressDialog"
@@ -29,8 +30,7 @@ import {getMailBodyText, lazyMemoized, noOp} from "../api/common/utils/Utils"
 import {ButtonType} from "../gui/base/ButtonN"
 import {theme} from "../gui/theme"
 import {BootIcons} from "../gui/base/icons/BootIcons"
-import type {Contact} from "../api/entities/tutanota/Contact"
-import type {Mail} from "../api/entities/tutanota/Mail"
+import {locator} from "../api/main/MainLocator"
 
 assertMainOrNode()
 
@@ -151,7 +151,7 @@ export class MultiSearchViewer {
 				})
 			}
 			return Promise.reduce(selectedMails, (set, mail) => {
-				return mailModel.getMailboxDetailsForMail(mail).then(mailBox => {
+				return locator.mailModel.getMailboxDetailsForMail(mail).then(mailBox => {
 					if (set.indexOf(mailBox) < 0) {
 						set.push(mailBox)
 					}
@@ -169,7 +169,7 @@ export class MultiSearchViewer {
 									//is needed for correct selection behavior on mobile
 									this._searchListView.selectNone()
 									// move all groups one by one because the mail list cannot be modified in parallel
-									Promise.each(mailsGroupedByFolder.values(), (mails) => mailModel.moveMails(mails, f))
+									Promise.each(mailsGroupedByFolder.values(), (mails) => locator.mailModel.moveMails(mails, f))
 								}, getFolderIcon(f)
 							).setType(ButtonType.Dropdown)
 						})

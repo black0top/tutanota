@@ -13,6 +13,7 @@ import {getTrashFolder, isFinalDelete} from "./MailUtils"
 import {createDeleteMailData} from "../api/entities/tutanota/DeleteMailData"
 import type {MailBox} from "../api/entities/tutanota/MailBox"
 import {MailBoxTypeRef} from "../api/entities/tutanota/MailBox"
+import type {MailboxGroupRoot} from "../api/entities/tutanota/MailboxGroupRoot"
 import {MailboxGroupRootTypeRef} from "../api/entities/tutanota/MailboxGroupRoot"
 import type {GroupInfo} from "../api/entities/sys/GroupInfo"
 import {GroupInfoTypeRef} from "../api/entities/sys/GroupInfo"
@@ -21,9 +22,7 @@ import {GroupTypeRef} from "../api/entities/sys/Group"
 import type {MailFolder} from "../api/entities/tutanota/MailFolder"
 import {MailFolderTypeRef} from "../api/entities/tutanota/MailFolder"
 import {FeatureType, GroupType, MailFolderType, OperationType} from "../api/common/TutanotaConstants"
-import {module as replaced} from "@hot"
 import {UserTypeRef} from "../api/entities/sys/User"
-import {locator} from "../api/main/MainLocator"
 import type {Mail} from "../api/entities/tutanota/Mail"
 import {MailTypeRef} from "../api/entities/tutanota/Mail"
 import type {EntityUpdateData} from "../api/main/EventController"
@@ -35,7 +34,6 @@ import {findAndApplyMatchingRule} from "./InboxRuleHandler"
 import {getFromMap} from "../api/common/utils/MapUtils"
 import {worker} from "../api/main/WorkerClient"
 import type {WebsocketCounterData} from "../api/entities/sys/WebsocketCounterData"
-import type {MailboxGroupRoot} from "../api/entities/tutanota/MailboxGroupRoot"
 
 export type MailboxDetail = {
 	mailbox: MailBox,
@@ -196,7 +194,7 @@ export class MailModel {
 	deleteMails(mails: Mail[]): Promise<void> {
 		const moveMap: Map<IdTuple, Mail[]> = new Map()
 		let mailBuckets = mails.reduce((buckets, mail) => {
-			const folder = mailModel.getMailFolder(mail._id[0])
+			const folder = this.getMailFolder(mail._id[0])
 			if (!folder) {
 				throw new ProgrammingError("tried to delete mail without folder")
 			} else if (isFinalDelete(folder)) {
@@ -218,7 +216,7 @@ export class MailModel {
 		}
 		if (mailBuckets.move.size > 0) {
 			for (const [folderId, mails] of mailBuckets.move) {
-				promises.push(mailModel.getMailboxFolders(mails[0]).then(folders => mailModel.moveMails(mails, getTrashFolder(folders))))
+				promises.push(this.getMailboxFolders(mails[0]).then(folders => this.moveMails(mails, getTrashFolder(folders))))
 			}
 		}
 		return Promise.all(promises).return()
@@ -251,7 +249,7 @@ export class MailModel {
 					// If we don't find another delete operation on this email in the batch, then it should be a create operation
 					const mailId = [update.instanceListId, update.instanceId]
 					load(MailTypeRef, mailId)
-						.then((mail) => mailModel.getMailboxDetailsForMailListId(update.instanceListId)
+						.then((mail) => this.getMailboxDetailsForMailListId(update.instanceListId)
 						                         .then(mailboxDetail => findAndApplyMatchingRule(mailboxDetail, mail))
 						                         .then((newId) => this._showNotification(newId || mailId)))
 						.catch(noOp)
@@ -288,12 +286,6 @@ export class MailModel {
 	checkMailForPhishing(mail: Mail, links: Array<string>): Promise<boolean> {
 		return worker.checkMailForPhishing(mail, links, this._eventController.phishingMarkers())
 	}
-}
-
-export const mailModel = new MailModel(new Notifications(), locator.eventController)
-
-if (replaced) {
-	Object.assign(mailModel, replaced.mailModel)
 }
 
 
