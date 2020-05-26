@@ -7,12 +7,15 @@ import type {MailboxDetail} from "../../../src/mail/MailModel"
 import {createCalendarEvent} from "../../../src/api/entities/tutanota/CalendarEvent"
 import {createGroupInfo} from "../../../src/api/entities/sys/GroupInfo"
 import type {ShareCapabilityEnum} from "../../../src/api/common/TutanotaConstants"
-import {ShareCapability, TimeFormat} from "../../../src/api/common/TutanotaConstants"
+import {GroupType, ShareCapability, TimeFormat} from "../../../src/api/common/TutanotaConstants"
 import type {CalendarInfo} from "../../../src/calendar/CalendarView"
 import {createGroupMembership} from "../../../src/api/entities/sys/GroupMembership"
 import type {User} from "../../../src/api/entities/sys/User"
 import {createUser} from "../../../src/api/entities/sys/User"
 import {createCalendarEventAttendee} from "../../../src/api/entities/tutanota/CalendarEventAttendee"
+import {createMailBox} from "../../../src/api/entities/tutanota/MailBox"
+import {createGroup} from "../../../src/api/entities/sys/Group"
+import {createMailboxGroupRoot} from "../../../src/api/entities/tutanota/MailboxGroupRoot"
 
 const calendarGroupId = "0"
 
@@ -21,7 +24,7 @@ o.spec("CalendarEventViewModel", function () {
 
 	o("init with existing event", function () {
 		const calendars = makeCalendars("own")
-		const mailboxDetail: MailboxDetail = downcast({})
+		const mailboxDetail = makeMailboxDetail()
 		const userController: IUserController = makeUserController()
 		const existingEvent = createCalendarEvent({
 			summary: "existing event",
@@ -48,7 +51,7 @@ o.spec("CalendarEventViewModel", function () {
 
 	o("invite in our own calendar", function () {
 		const calendars = makeCalendars("own")
-		const mailboxDetail: MailboxDetail = downcast({})
+		const mailboxDetail = makeMailboxDetail()
 		const userController: IUserController = makeUserController()
 		const existingEvent = createCalendarEvent({
 			summary: "existing event",
@@ -61,14 +64,14 @@ o.spec("CalendarEventViewModel", function () {
 		})
 		const viewModel = new CalendarEventViewModel(now, calendars, mailboxDetail, userController, existingEvent)
 		o(viewModel.readOnly).equals(false)
-		o(viewModel.canModifyGuests()).equals(false)("canModifyGuests")
+		o(viewModel.canModifyGuests()).equals(false)
 		o(viewModel.canModifyOwnAttendance()).equals(true)
 		o(viewModel.canModifyOrganizer()).equals(false)
 	})
 
 	o("new invite (without calendar)", function () {
 		const calendars = makeCalendars("own")
-		const mailboxDetail: MailboxDetail = downcast({})
+		const mailboxDetail = makeMailboxDetail()
 		const userController = makeUserController()
 		const existingEvent = createCalendarEvent({
 			summary: "existing event",
@@ -80,14 +83,34 @@ o.spec("CalendarEventViewModel", function () {
 		})
 		const viewModel = new CalendarEventViewModel(now, calendars, mailboxDetail, userController, existingEvent)
 		o(viewModel.readOnly).equals(false)
-		o(viewModel.canModifyGuests()).equals(false)("canModifyGuests")
+		o(viewModel.canModifyGuests()).equals(false)
 		o(viewModel.canModifyOwnAttendance()).equals(true)
 		o(viewModel.canModifyOrganizer()).equals(false)
 	})
 
-	o("invite in another calendar", function () {
+	o("in writable calendar", function () {
 		const calendars = makeCalendars("shared")
-		const mailboxDetail = downcast({})
+		const mailboxDetail = makeMailboxDetail()
+		const userController = makeUserController()
+		addCapability(userController.user, calendarGroupId, ShareCapability.Write)
+
+		const existingEvent = createCalendarEvent({
+			summary: "existing event",
+			startTime: new Date(2020, 4, 26, 12),
+			endTime: new Date(2020, 4, 26, 13),
+			organizer: "another-user@provider.com",
+			_ownerGroup: calendarGroupId,
+		})
+		const viewModel = new CalendarEventViewModel(now, calendars, mailboxDetail, userController, existingEvent)
+		o(viewModel.readOnly).equals(false)
+		o(viewModel.canModifyGuests()).equals(false)
+		o(viewModel.canModifyOwnAttendance()).equals(false)
+		o(viewModel.canModifyOrganizer()).equals(false)
+	})
+
+	o("invite in writable calendar", function () {
+		const calendars = makeCalendars("shared")
+		const mailboxDetail = makeMailboxDetail()
 		const userController = makeUserController()
 		addCapability(userController.user, calendarGroupId, ShareCapability.Write)
 
@@ -100,15 +123,15 @@ o.spec("CalendarEventViewModel", function () {
 			isCopy: true,
 		})
 		const viewModel = new CalendarEventViewModel(now, calendars, mailboxDetail, userController, existingEvent)
-		o(viewModel.readOnly).equals(true)
-		o(viewModel.canModifyGuests()).equals(false)("canModifyGuests")
+		o(viewModel.readOnly).equals(false)
+		o(viewModel.canModifyGuests()).equals(false)
 		o(viewModel.canModifyOwnAttendance()).equals(false)
 		o(viewModel.canModifyOrganizer()).equals(false)
 	})
 
 	o("in readonly calendar", function () {
 		const calendars = makeCalendars("shared")
-		const mailboxDetail: MailboxDetail = downcast({})
+		const mailboxDetail = makeMailboxDetail()
 		const userController = makeUserController()
 		addCapability(userController.user, calendarGroupId, ShareCapability.Read)
 		const existingEvent = createCalendarEvent({
@@ -128,7 +151,10 @@ function makeCalendars(type: "own" | "shared"): Map<string, CalendarInfo> {
 		groupRoot: downcast({}),
 		longEvents: new LazyLoaded(() => Promise.resolve([])),
 		groupInfo: downcast({}),
-		group: downcast({}),
+		group: createGroup({
+			_id: calendarGroupId,
+			type: GroupType.Calendar,
+		}),
 		shared: type === "shared"
 	}
 	return new Map([[calendarGroupId, calendarInfo]])
@@ -155,4 +181,14 @@ function addCapability(user: User, groupId: Id, capability: ShareCapabilityEnum)
 		group: groupId,
 		capability,
 	}))
+}
+
+function makeMailboxDetail(): MailboxDetail {
+	return {
+		mailbox: createMailBox(),
+		folders: [],
+		mailGroupInfo: createGroupInfo(),
+		mailGroup: createGroup(),
+		mailboxGroupRoot: createMailboxGroupRoot(),
+	}
 }

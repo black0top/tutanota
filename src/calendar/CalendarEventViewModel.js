@@ -10,7 +10,7 @@ import type {AlarmInfo} from "../api/entities/sys/AlarmInfo"
 import {createAlarmInfo} from "../api/entities/sys/AlarmInfo"
 import type {MailboxDetail} from "../mail/MailModel"
 import stream from "mithril/stream/stream.js"
-import {getDefaultSenderFromUser} from "../mail/MailUtils"
+import {getDefaultSenderFromUser, getEnabledMailAddressesWithUser} from "../mail/MailUtils"
 import {
 	assignEventId,
 	createRepeatRuleWithValues,
@@ -69,6 +69,7 @@ export class CalendarEventViewModel {
 	alarms: $ReadOnlyArray<AlarmInfo>;
 	going: CalendarAttendeeStatusEnum;
 	_user: User;
+	+_isInSharedCalendar: boolean;
 
 	constructor(date: Date, calendars: Map<Id, CalendarInfo>, mailboxDetail: MailboxDetail, userController: IUserController,
 	            existingEvent?: CalendarEvent) {
@@ -77,8 +78,7 @@ export class CalendarEventViewModel {
 		this.selectedCalendar = stream(this.calendars[0])
 		this.attendees = existingEvent && existingEvent.attendees.slice() || []
 		this.organizer = existingEvent && existingEvent.organizer || getDefaultSenderFromUser(userController)
-		// TODO
-		this.possibleOrganizers = [this.organizer]
+		this.possibleOrganizers = getEnabledMailAddressesWithUser(mailboxDetail, userController.user)
 		this.location = stream("")
 		this.note = stream("")
 		this.allDay = stream(true)
@@ -91,15 +91,27 @@ export class CalendarEventViewModel {
 
 		/**
 		 * Capability for events is fairly complicated:
-		 * Not share "shared" means "not owner of the calendar". Calendar always looks like personal for the owner.
+		 * Note: share "shared" means "not owner of the calendar". Calendar always looks like personal for the owner.
 		 *
-		 * | Calendar | Organizer | Can do |
-		 * |----------|-----------|---------
-		 * | Personal | Self      | everything
-		 * | Personal | Other     | everything (local copy of shared event)
-		 * | Shared   | Self      | cannot edit - it might be calendar owner's version of the event
-		 * | Shared   | Other     | cannot modify if there are guests
+		 * | Calendar | isCopy  | edit details    | own attendance | guests | organizer
+		 * |----------|---------|-----------------|----------------|--------|----------
+		 * | Personal | no      | yes             | yes            | yes    | yes
+		 * | Personal | yes     | yes (local)     | yes            | no     | no
+		 * | Shared   | no      | yes***          | no             | no*    | no*
+		 * | Shared   | yes     | yes*** (local)  | no**           | no*    | no*
+		 *
+		 *   * we don't allow sharing in other people's calendar because later only organizer can modify event and
+		 *   we don't want to prevent calendar owner from editing events in their own calendar.
+		 *
+		 *   ** this is not "our" copy of the event, from the point of organizer we saw it just accidentally.
+		 *   Later we might support proposing ourselves as attendee but currently organizer should be asked to
+		 *   send out the event.
+		 *
+		 *   *** depends on share capability
 		 */
+
+
+		this._isInSharedCalendar = false // Default
 
 		if (!existingEvent) {
 			this.readOnly = false
@@ -107,6 +119,7 @@ export class CalendarEventViewModel {
 			// OwnerGroup is not set for events from file
 			const calendarInfoForEvent = existingEvent._ownerGroup && calendars.get(existingEvent._ownerGroup)
 			if (calendarInfoForEvent) {
+				this._isInSharedCalendar = calendarInfoForEvent.shared
 				this.readOnly = calendarInfoForEvent.shared &&
 					!hasCapabilityOnGroup(this._user, calendarInfoForEvent.group, ShareCapability.Write)
 			} else {
@@ -140,7 +153,6 @@ export class CalendarEventViewModel {
 					endType: downcast(existingRule.endType),
 					endValue: existingRule.endType === EndType.Count ? Number(existingRule.endValue) : 1,
 				}
-				// TODO end type date
 				if (existingRule.endType === EndType.UntilDate) {
 					const rawEndDate = new Date(Number(existingRule.endValue))
 					const localDate = this.allDay() ? getAllDayDateForTimezone(rawEndDate, this._zone) : rawEndDate
@@ -296,7 +308,7 @@ export class CalendarEventViewModel {
 	}
 
 	canModifyGuests(): boolean {
-		return !this.readOnly && (!this.existingEvent || !this.existingEvent.isCopy)
+		return !this._isInSharedCalendar && (!this.existingEvent || !this.existingEvent.isCopy)
 	}
 
 	removeAttendee(guest: CalendarEventAttendee) {
@@ -304,11 +316,11 @@ export class CalendarEventViewModel {
 	}
 
 	canModifyOwnAttendance(): boolean {
-		return !this.readOnly
+		return !this._isInSharedCalendar
 	}
 
 	canModifyOrganizer(): bool {
-		return !this.readOnly && (!this.existingEvent || !this.existingEvent.isCopy) && this.attendees.length === 0
+		return !this._isInSharedCalendar && (!this.existingEvent || !this.existingEvent.isCopy) && this.attendees.length === 0
 	}
 
 	/**
