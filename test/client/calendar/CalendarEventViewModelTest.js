@@ -144,6 +144,28 @@ o.spec("CalendarEventViewModel", function () {
 		o(viewModel.canModifyOwnAttendance()).equals(false)
 		o(viewModel.canModifyOrganizer()).equals(false)
 	})
+
+	o("in writable calendar w/ guests", function () {
+		const calendars = makeCalendars("shared")
+		const mailboxDetail = makeMailboxDetail()
+		const userController = makeUserController()
+		addCapability(userController.user, calendarGroupId, ShareCapability.Write)
+
+		const existingEvent = createCalendarEvent({
+			summary: "existing event",
+			startTime: new Date(2020, 4, 26, 12),
+			endTime: new Date(2020, 4, 26, 13),
+			organizer: "another-user@provider.com",
+			_ownerGroup: calendarGroupId,
+			attendees: [createCalendarEventAttendee()]
+		})
+		const viewModel = new CalendarEventViewModel(now, calendars, mailboxDetail, userController, existingEvent)
+		o(viewModel.readOnly).equals(true)
+		o(viewModel.canModifyGuests()).equals(false)
+		o(viewModel.canModifyOwnAttendance()).equals(false)
+		o(viewModel.canModifyOrganizer()).equals(false)
+	})
+
 })
 
 function makeCalendars(type: "own" | "shared"): Map<string, CalendarInfo> {

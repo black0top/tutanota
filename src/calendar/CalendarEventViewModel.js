@@ -107,7 +107,7 @@ export class CalendarEventViewModel {
 		 *   Later we might support proposing ourselves as attendee but currently organizer should be asked to
 		 *   send out the event.
 		 *
-		 *   *** depends on share capability
+		 *   *** depends on share capability. Cannot edit if it's not a copy and there are attendees.
 		 */
 
 
@@ -121,7 +121,8 @@ export class CalendarEventViewModel {
 			if (calendarInfoForEvent) {
 				this._isInSharedCalendar = calendarInfoForEvent.shared
 				this.readOnly = calendarInfoForEvent.shared &&
-					!hasCapabilityOnGroup(this._user, calendarInfoForEvent.group, ShareCapability.Write)
+					(!hasCapabilityOnGroup(this._user, calendarInfoForEvent.group, ShareCapability.Write) ||
+						this.attendees.length > 0)
 			} else {
 				// We can edit new invites (from files)
 				this.readOnly = false
