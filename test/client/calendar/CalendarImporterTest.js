@@ -288,8 +288,8 @@ o.spec("CalendarImporterTest", function () {
 					"SEQUENCE:0",
 					"END:VEVENT",
 					"END:VCALENDAR",
-				].join("\r\n"), zone)[0]
-			).deepEquals([
+				].join("\r\n"), zone).contents[0]
+			).deepEquals(
 				{
 					event: createCalendarEvent({
 						summary: "Labor Day / May Day",
@@ -301,7 +301,7 @@ o.spec("CalendarImporterTest", function () {
 					}),
 					alarms: []
 				},
-			][0])
+			)
 		})
 
 		o("all-day event with invalid DTEND", function () {
@@ -324,8 +324,8 @@ o.spec("CalendarImporterTest", function () {
 					"SEQUENCE:0",
 					"END:VEVENT",
 					"END:VCALENDAR",
-				].join("\r\n"), zone)[0]
-			).deepEquals([
+				].join("\r\n"), zone).contents[0]
+			).deepEquals(
 				{
 					event: createCalendarEvent({
 						summary: "Labor Day / May Day",
@@ -337,7 +337,7 @@ o.spec("CalendarImporterTest", function () {
 					}),
 					alarms: []
 				},
-			][0])
+			)
 		})
 
 		o("with alarm in the future", function () {

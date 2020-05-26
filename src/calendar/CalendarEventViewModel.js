@@ -1,7 +1,7 @@
 //@flow
 import type {CalendarInfo} from "./CalendarView"
 import type {AlarmIntervalEnum, CalendarAttendeeStatusEnum, EndTypeEnum, RepeatPeriodEnum} from "../api/common/TutanotaConstants"
-import {CalendarAttendeeStatus, EndType, RepeatPeriod, TimeFormat} from "../api/common/TutanotaConstants"
+import {CalendarAttendeeStatus, EndType, RepeatPeriod, ShareCapability, TimeFormat} from "../api/common/TutanotaConstants"
 import type {CalendarEventAttendee} from "../api/entities/tutanota/CalendarEventAttendee"
 import {createCalendarEventAttendee} from "../api/entities/tutanota/CalendarEventAttendee"
 import type {CalendarEvent} from "../api/entities/tutanota/CalendarEvent"
@@ -23,6 +23,7 @@ import {
 	getStartOfDayWithZone,
 	getStartOfNextDayWithZone,
 	getTimeZone,
+	hasCapabilityOnGroup,
 	parseTime,
 	timeString,
 	timeStringFromParts
@@ -103,44 +104,16 @@ export class CalendarEventViewModel {
 		if (!existingEvent) {
 			this.readOnly = false
 		} else {
-			// OwnerGroup is not set for invites
+			// OwnerGroup is not set for events from file
 			const calendarInfoForEvent = existingEvent._ownerGroup && calendars.get(existingEvent._ownerGroup)
 			if (calendarInfoForEvent) {
-				this.readOnly = calendarInfoForEvent.shared
-				// readOnly = !hasCapabilityOnGroup(logins.getUserController().user, calendarInfoForEvent.group, ShareCapability.Write)
-				// 	|| calendarInfoForEvent.shared && attendees.length > 0
-				// canModifyGuests = isOwnEvent && !calendarInfoForEvent.shared
-				// canModifyOwnAttendance = !calendarInfoForEvent.shared
+				this.readOnly = calendarInfoForEvent.shared &&
+					!hasCapabilityOnGroup(this._user, calendarInfoForEvent.group, ShareCapability.Write)
 			} else {
 				// We can edit new invites (from files)
 				this.readOnly = false
 			}
 		}
-
-
-		// TODO: re-do this capability things, some of them should be dynamic
-		// const user = logins.getUserController().user
-		// let calendarArray = Array.from(calendars.values())
-		// let readOnly = false
-		// const mailAddresses = getEnabledMailAddresses(mailboxDetail)
-		// const attendees = existingEvent && existingEvent.attendees.slice() || []
-		// const organizer = stream(existingEvent && existingEvent.organizer || getDefaultSenderFromUser())
-		// const isOwnEvent = mailAddresses.includes(organizer())
-		// let canModifyGuests = isOwnEvent
-		// let canModifyOwnAttendance = true
-		//
-		// if (!existingEvent) {
-		// 	calendarArray = calendarArray.filter(calendarInfo => hasCapabilityOnGroup(user, calendarInfo.group, ShareCapability.Write))
-		// } else {
-		// 	// OwnerGroup is not set for invites
-		// 	const calendarInfoForEvent = existingEvent._ownerGroup && calendars.get(existingEvent._ownerGroup)
-		// 	if (calendarInfoForEvent) {
-		// 		readOnly = !hasCapabilityOnGroup(logins.getUserController().user, calendarInfoForEvent.group, ShareCapability.Write)
-		// 			|| calendarInfoForEvent.shared && attendees.length > 0
-		// 		canModifyGuests = isOwnEvent && !calendarInfoForEvent.shared
-		// 		canModifyOwnAttendance = !calendarInfoForEvent.shared
-		// 	}
-		// }
 
 		if (existingEvent) {
 			this.summary(existingEvent.summary)
@@ -182,7 +155,6 @@ export class CalendarEventViewModel {
 			this.location(existingEvent.location)
 			this.note(existingEvent.description)
 
-			// TODO: alarms
 			for (let alarmInfoId of existingEvent.alarmInfos) {
 				if (isSameId(listIdPart(alarmInfoId), neverNull(this._user.alarmInfoList).alarms)) {
 					load(UserAlarmInfoTypeRef, alarmInfoId).then((userAlarmInfo) => {
@@ -324,7 +296,7 @@ export class CalendarEventViewModel {
 	}
 
 	canModifyGuests(): boolean {
-		return true // TODO
+		return !this.readOnly && (!this.existingEvent || !this.existingEvent.isCopy)
 	}
 
 	removeAttendee(guest: CalendarEventAttendee) {
@@ -332,11 +304,11 @@ export class CalendarEventViewModel {
 	}
 
 	canModifyOwnAttendance(): boolean {
-		return true // TODO
+		return !this.readOnly
 	}
 
 	canModifyOrganizer(): bool {
-		return true // TODO
+		return !this.readOnly && (!this.existingEvent || !this.existingEvent.isCopy) && this.attendees.length === 0
 	}
 
 	/**

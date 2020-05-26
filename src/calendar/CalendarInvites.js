@@ -180,6 +180,8 @@ export function showEventDetailsFromFile(firstCalendarFile: TutanotaFile) {
 				      // It should be the latest version eventually via CalendarEventUpdates
 				      showCalendarEventDialog(existingEvent.startTime, calendarInfo, mailboxDetails, existingEvent)
 			      } else {
+			      	// Set isCopy here to show that this is not created by us
+				      parsedEvent.isCopy = true
 				      showCalendarEventDialog(parsedEvent.startTime, calendarInfo, mailboxDetails, parsedEvent)
 			      }
 		      })
