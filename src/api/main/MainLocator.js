@@ -6,14 +6,14 @@ import {SearchModel} from "../../search/SearchModel"
 import {assertMainOrNode} from "../Env"
 import {logins} from "./LoginController"
 import type {CalendarUpdateDistributor} from "../../calendar/CalendarUpdateDistributor"
-import {CalendarEventViewModel} from "../../calendar/CalendarEventViewModel"
-import {CalendarMailDistributor} from "../../calendar/CalendarUpdateDistributor"
-import {MailModel} from "../../mail/MailModel"
-import {lazyMemoized} from "../common/utils/Utils"
-import type {CalendarInfo} from "../../calendar/CalendarView"
 import type {MailboxDetail} from "../../mail/MailModel"
+import {MailModel} from "../../mail/MailModel"
+import {asyncImport} from "../common/utils/Utils"
+import type {CalendarInfo} from "../../calendar/CalendarView"
 import type {CalendarEvent} from "../entities/tutanota/CalendarEvent"
 import {Notifications} from "../../gui/Notifications"
+import type {CalendarEventViewModel} from "../../calendar/CalendarEventViewModel"
+import {ClientsideAPI} from "./Entity"
 
 assertMainOrNode()
 
@@ -21,14 +21,16 @@ export type MainLocatorType = {
 	eventController: EventController;
 	entropyCollector: EntropyCollector;
 	search: SearchModel;
-	calendarUpdateDistributor: () => CalendarUpdateDistributor;
+	calendarUpdateDistributor: () => Promise<CalendarUpdateDistributor>;
+	// Async because we have dependency cycles all over the place. It's also a good idea to not import it right away.
 	calendarEventViewModel: (
 		date: Date,
 		calendars: Map<Id, CalendarInfo>,
 		mailboxDetail: MailboxDetail,
 		existingEvent?: CalendarEvent,
-	) => CalendarEventViewModel;
+	) => Promise<CalendarEventViewModel>;
 	mailModel: MailModel;
+	api: API;
 }
 
 export const locator: MainLocatorType = ({}: any)
@@ -38,17 +40,32 @@ if (typeof window !== "undefined") {
 }
 
 export function initLocator(worker: WorkerClient) {
+	const importBase = typeof module !== "undefined" ? module.id : __moduleName
 	locator.eventController = new EventController(logins)
 	locator.entropyCollector = new EntropyCollector(worker)
 	locator.search = new SearchModel()
 	locator.mailModel = new MailModel(new Notifications(), locator.eventController)
-	locator.calendarUpdateDistributor = lazyMemoized(() => new CalendarMailDistributor(locator.mailModel))
-	locator.calendarEventViewModel = (date, calendars, mailboxDetail, existingEvent) => new CalendarEventViewModel(
-		logins.getUserController(),
-		locator.calendarUpdateDistributor(),
-		mailboxDetail,
-		date,
-		calendars,
-		existingEvent,
-	)
+	locator.api = new ClientsideAPI()
+
+	locator.calendarUpdateDistributor = () =>
+		asyncImport(importBase, `${env.rootPathPrefix}src/calendar/CalendarUpdateDistributor.js`)
+			.then(({CalendarMailDistributor}) => new CalendarMailDistributor(locator.mailModel))
+
+	locator.calendarEventViewModel = (date, calendars, mailboxDetail, existingEvent) =>
+		Promise.all([
+			locator.calendarUpdateDistributor(),
+			(asyncImport(importBase, `${env.rootPathPrefix}src/calendar/CalendarEventViewModel.js`):
+				Promise<{CalendarEventViewModel: Class<CalendarEventViewModel>}>),
+		]).then(([distributor, {CalendarEventViewModel}]) =>
+			new CalendarEventViewModel(
+				logins.getUserController(),
+				distributor,
+				locator.api,
+				mailboxDetail,
+				date,
+				calendars,
+				existingEvent,
+			)
+		)
+
 }

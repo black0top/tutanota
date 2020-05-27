@@ -17,6 +17,8 @@ import {createMailBox} from "../../../src/api/entities/tutanota/MailBox"
 import {createGroup} from "../../../src/api/entities/sys/Group"
 import {createMailboxGroupRoot} from "../../../src/api/entities/tutanota/MailboxGroupRoot"
 import type {CalendarUpdateDistributor} from "../../../src/calendar/CalendarUpdateDistributor"
+import type {IUserController} from "../../../src/api/main/UserController"
+import type {CalendarEvent} from "../../../src/api/entities/tutanota/CalendarEvent"
 
 const calendarGroupId = "0"
 
@@ -36,7 +38,7 @@ o.spec("CalendarEventViewModel", function () {
 			location: "location",
 			_ownerGroup: calendarGroupId,
 		})
-		const viewModel = new CalendarEventViewModel(userController, distributor, mailboxDetail, now, calendars,  existingEvent)
+		const viewModel = new CalendarEventViewModel(userController, distributor, mailboxDetail, now, calendars, existingEvent)
 
 		o(viewModel.summary()).equals(existingEvent.summary)
 		o(viewModel.startDate.toISOString()).equals(new Date(2020, 4, 26).toISOString())
@@ -65,7 +67,7 @@ o.spec("CalendarEventViewModel", function () {
 			isCopy: true,
 			attendees: [createCalendarEventAttendee()]
 		})
-		const viewModel = new CalendarEventViewModel(userController, distributor, mailboxDetail, now, calendars,  existingEvent)
+		const viewModel = new CalendarEventViewModel(userController, distributor, mailboxDetail, now, calendars, existingEvent)
 		o(viewModel.readOnly).equals(false)
 		o(viewModel.canModifyGuests()).equals(false)
 		o(viewModel.canModifyOwnAttendance()).equals(true)
@@ -85,7 +87,7 @@ o.spec("CalendarEventViewModel", function () {
 			_ownerGroup: null,
 			isCopy: true,
 		})
-		const viewModel = new CalendarEventViewModel(userController, distributor, mailboxDetail, now, calendars,  existingEvent)
+		const viewModel = new CalendarEventViewModel(userController, distributor, mailboxDetail, now, calendars, existingEvent)
 		o(viewModel.readOnly).equals(false)
 		o(viewModel.canModifyGuests()).equals(false)
 		o(viewModel.canModifyOwnAttendance()).equals(true)
@@ -106,7 +108,7 @@ o.spec("CalendarEventViewModel", function () {
 			organizer: "another-user@provider.com",
 			_ownerGroup: calendarGroupId,
 		})
-		const viewModel = new CalendarEventViewModel(userController, distributor, mailboxDetail, now, calendars,  existingEvent)
+		const viewModel = new CalendarEventViewModel(userController, distributor, mailboxDetail, now, calendars, existingEvent)
 		o(viewModel.readOnly).equals(false)
 		o(viewModel.canModifyGuests()).equals(false)
 		o(viewModel.canModifyOwnAttendance()).equals(false)
@@ -128,7 +130,7 @@ o.spec("CalendarEventViewModel", function () {
 			_ownerGroup: calendarGroupId,
 			isCopy: true,
 		})
-		const viewModel = new CalendarEventViewModel(userController, distributor, mailboxDetail, now, calendars,  existingEvent)
+		const viewModel = new CalendarEventViewModel(userController, distributor, mailboxDetail, now, calendars, existingEvent)
 		o(viewModel.readOnly).equals(false)
 		o(viewModel.canModifyGuests()).equals(false)
 		o(viewModel.canModifyOwnAttendance()).equals(false)
@@ -144,7 +146,7 @@ o.spec("CalendarEventViewModel", function () {
 		const existingEvent = createCalendarEvent({
 			_ownerGroup: calendarGroupId,
 		})
-		const viewModel = new CalendarEventViewModel(userController, distributor, mailboxDetail, now, calendars,  existingEvent)
+		const viewModel = new CalendarEventViewModel(userController, distributor, mailboxDetail, now, calendars, existingEvent)
 
 		o(viewModel.readOnly).equals(true)
 		o(viewModel.canModifyGuests()).equals(false)("canModifyGuests")
@@ -167,14 +169,44 @@ o.spec("CalendarEventViewModel", function () {
 			_ownerGroup: calendarGroupId,
 			attendees: [createCalendarEventAttendee()]
 		})
-		const viewModel = new CalendarEventViewModel(userController, distributor, mailboxDetail, now, calendars,  existingEvent)
+		const viewModel = new CalendarEventViewModel(userController, distributor, mailboxDetail, now, calendars, existingEvent)
 		o(viewModel.readOnly).equals(true)
 		o(viewModel.canModifyGuests()).equals(false)
 		o(viewModel.canModifyOwnAttendance()).equals(false)
 		o(viewModel.canModifyOrganizer()).equals(false)
 	})
 
+	o.only("delete event", async function () {
+		const calendars = makeCalendars("shared")
+		const mailboxDetail = makeMailboxDetail()
+		const userController = makeUserController()
+		const distributor = makeDistributor()
+		addCapability(userController.user, calendarGroupId, ShareCapability.Write)
+		const attendee = createCalendarEventAttendee()
+		const existingEvent = createCalendarEvent({
+			_id: ["listid", "calendarid"],
+			summary: "existing event",
+			startTime: new Date(2020, 4, 26, 12),
+			endTime: new Date(2020, 4, 26, 13),
+			organizer: "another-user@provider.com",
+			_ownerGroup: calendarGroupId,
+			attendees: [attendee]
+		})
+		const viewModel = new CalendarEventViewModel(userController, distributor, mailboxDetail, now, calendars, existingEvent)
+		await viewModel.deleteEvent()
+		o(distributor.sendCancellation.calls).deepEquals([[existingEvent, attendee]])
+	})
 })
+
+function init({
+	userController: makeUserController(),
+	distributor: makeDistributor(),
+	mailboxDetail: makeMailboxDetail(),
+	calendars: makeCalendars(),
+	existinngEvent: CalendarEvent
+}: {userController: IUserController, distributor: }): CalendarEventViewModel {
+	return new CalendarEventViewModel(userController, distributor, mailboxDetail, now, calendars, existingEvent)
+}
 
 function makeCalendars(type: "own" | "shared"): Map<string, CalendarInfo> {
 	const calendarInfo = {

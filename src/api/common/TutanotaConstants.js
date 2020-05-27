@@ -663,14 +663,3 @@ export const CalendarMethod = Object.freeze({
 })
 
 export type CalendarMethodEnum = $Values<typeof CalendarMethod>
-
-export const IcalendarCalendarMethod = {
-	PUBLISH: "PUBLISH",
-	REQUEST: "REQUEST",
-	REPLY: "REPLY",
-	ADD: "ADD",
-	CANCEL: "CANCEL",
-	REFRESH: "REFRESH",
-	COUNTER: "COUNTER",
-	DECLINECOUNTER: "DECLINECOUNTER",
-}

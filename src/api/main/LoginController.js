@@ -2,6 +2,7 @@
 import {defer, neverNull} from "../common/utils/Utils"
 import {assertMainOrNodeBoot, getHttpOrigin} from "../Env"
 import type {FeatureTypeEnum} from "../common/TutanotaConstants"
+import type {IUserController} from "./UserController"
 
 assertMainOrNodeBoot()
 

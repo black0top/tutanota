@@ -44,6 +44,7 @@ import type {MailFolder} from "../api/entities/tutanota/MailFolder"
 import type {File as TutanotaFile} from "../api/entities/tutanota/File"
 import type {GroupInfo} from "../api/entities/sys/GroupInfo"
 import {locator} from "../api/main/MainLocator"
+import type {IUserController} from "../api/main/UserController"
 
 assertMainOrNode()
 
@@ -369,7 +370,7 @@ export function getEnabledMailAddresses(mailboxDetails: MailboxDetail): string[]
 	return getEnabledMailAddressesWithUser(mailboxDetails, logins.getUserController().userGroupInfo)
 }
 
-export function getEnabledMailAddressesWithUser(mailboxDetail: MailboxDetail, userGroupInfo: GroupInfo) {
+export function getEnabledMailAddressesWithUser(mailboxDetail: MailboxDetail, userGroupInfo: GroupInfo): Array<string> {
 	if (isUserMailbox(mailboxDetail)) {
 		return getEnabledMailAddressesForGroupInfo(userGroupInfo)
 	} else {

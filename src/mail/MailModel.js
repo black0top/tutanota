@@ -1,7 +1,7 @@
 //@flow
 import m from "mithril"
 import stream from "mithril/stream/stream.js"
-import {containsEventOfType, neverNull, noOp} from "../api/common/utils/Utils"
+import {containsEventOfType, getEnabledMailAddressesForGroupInfo, neverNull, noOp} from "../api/common/utils/Utils"
 import {createMoveMailData} from "../api/entities/tutanota/MoveMailData"
 import {load, loadAll, serviceRequestVoid} from "../api/main/Entity"
 import {TutanotaService} from "../api/entities/tutanota/Services"
@@ -34,6 +34,7 @@ import {findAndApplyMatchingRule} from "./InboxRuleHandler"
 import {getFromMap} from "../api/common/utils/MapUtils"
 import {worker} from "../api/main/WorkerClient"
 import type {WebsocketCounterData} from "../api/entities/sys/WebsocketCounterData"
+import {contains} from "../api/common/utils/ArrayUtils"
 
 export type MailboxDetail = {
 	mailbox: MailBox,
@@ -250,8 +251,8 @@ export class MailModel {
 					const mailId = [update.instanceListId, update.instanceId]
 					load(MailTypeRef, mailId)
 						.then((mail) => this.getMailboxDetailsForMailListId(update.instanceListId)
-						                         .then(mailboxDetail => findAndApplyMatchingRule(mailboxDetail, mail))
-						                         .then((newId) => this._showNotification(newId || mailId)))
+						                    .then(mailboxDetail => findAndApplyMatchingRule(mailboxDetail, mail))
+						                    .then((newId) => this._showNotification(newId || mailId)))
 						.catch(noOp)
 				}
 			}
@@ -287,7 +288,4 @@ export class MailModel {
 		return worker.checkMailForPhishing(mail, links, this._eventController.phishingMarkers())
 	}
 }
-
-
-
 

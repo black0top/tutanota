@@ -43,6 +43,18 @@ import {locator} from "../api/main/MainLocator"
 
 assertMainOrNode()
 
+export interface ILoginViewController {
+	formLogin(): void;
+
+	autologin(credentials: Credentials): void;
+
+	deleteCredentialsNotLoggedIn(credentials: Credentials): Promise<void>;
+
+	migrateDeviceConfig(oldCredentials: Object[]): Promise<void>;
+
+	loadSignupWizard(): Promise<{+show: Function}>;
+}
+
 export class LoginViewController implements ILoginViewController {
 	view: LoginView;
 	_loginPromise: Promise<void>;

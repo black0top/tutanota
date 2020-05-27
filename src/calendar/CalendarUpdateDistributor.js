@@ -4,7 +4,7 @@ import {MailEditor} from "../mail/MailEditor"
 import {lang} from "../misc/LanguageViewModel"
 import {makeInvitationCalendarFile} from "./CalendarImporter"
 import type {CalendarAttendeeStatusEnum, CalendarMethodEnum} from "../api/common/TutanotaConstants"
-import {CalendarMethod, getAttendeeStatus, IcalendarCalendarMethod} from "../api/common/TutanotaConstants"
+import {CalendarMethod, getAttendeeStatus} from "../api/common/TutanotaConstants"
 import {calendarAttendeeStatusSymbol, formatEventDuration, getTimeZone} from "./CalendarUtils"
 import type {CalendarEvent} from "../api/entities/tutanota/CalendarEvent"
 import type {AlarmInfo} from "../api/entities/sys/AlarmInfo"
@@ -47,7 +47,7 @@ export class CalendarMailDistributor implements CalendarUpdateDistributor {
 				makeInviteEmailBody(existingEvent, message),
 				/*confidential*/false
 			)
-			const inviteFile = makeInvitationCalendarFile(existingEvent, IcalendarCalendarMethod.REQUEST, new Date(), getTimeZone())
+			const inviteFile = makeInvitationCalendarFile(existingEvent, CalendarMethod.REQUEST, new Date(), getTimeZone())
 			sendCalendarFile(editor, inviteFile, CalendarMethod.REQUEST)
 		})
 	}
@@ -62,7 +62,7 @@ export class CalendarMailDistributor implements CalendarUpdateDistributor {
 			editor.initWithTemplate({bcc}, lang.get("eventUpdated_msg", {"{event}": event.summary}),
 				makeInviteEmailBody(event, ""))
 
-			const file = makeInvitationCalendarFile(event, IcalendarCalendarMethod.REQUEST, new Date(), getTimeZone())
+			const file = makeInvitationCalendarFile(event, CalendarMethod.REQUEST, new Date(), getTimeZone())
 			sendCalendarFile(editor, file, CalendarMethod.REQUEST)
 		})
 	}
@@ -77,7 +77,7 @@ export class CalendarMailDistributor implements CalendarUpdateDistributor {
 			editor.initWithTemplate({bcc}, lang.get("eventCancelled_msg", {"{event}": event.summary}),
 				makeInviteEmailBody(event, ""))
 
-			const file = makeInvitationCalendarFile(event, IcalendarCalendarMethod.CANCEL, new Date(), getTimeZone())
+			const file = makeInvitationCalendarFile(event, CalendarMethod.CANCEL, new Date(), getTimeZone())
 			sendCalendarFile(editor, file, CalendarMethod.CANCEL)
 		})
 	}
@@ -93,7 +93,7 @@ export class CalendarMailDistributor implements CalendarUpdateDistributor {
 			editor.initWithTemplate({to: [{name: "", address: organizer}]},
 				message,
 				makeResponseEmailBody(event, message, sender, status), false)
-			const responseFile = makeInvitationCalendarFile(event, IcalendarCalendarMethod.REPLY, new Date(), getTimeZone())
+			const responseFile = makeInvitationCalendarFile(event, CalendarMethod.REPLY, new Date(), getTimeZone())
 			sendCalendarFile(editor, responseFile, CalendarMethod.REPLY)
 		})
 	}

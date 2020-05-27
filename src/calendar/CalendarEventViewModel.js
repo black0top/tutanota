@@ -43,6 +43,8 @@ import {UserAlarmInfoTypeRef} from "../api/entities/sys/UserAlarmInfo"
 import type {User} from "../api/entities/sys/User"
 import {incrementDate} from "../api/common/utils/DateUtils"
 import type {CalendarUpdateDistributor} from "./CalendarUpdateDistributor"
+import type {IUserController} from "../api/main/UserController"
+import type {API} from "../api/main/Entity"
 
 const TIMESTAMP_ZERO_YEAR = 1970
 
@@ -72,22 +74,25 @@ export class CalendarEventViewModel {
 	_user: User;
 	+_isInSharedCalendar: boolean;
 	+_distributor: CalendarUpdateDistributor;
+	+_api: API;
 
 	constructor(
 		userController: IUserController,
 		distributor: CalendarUpdateDistributor,
+		api: API,
 		mailboxDetail: MailboxDetail,
 		date: Date,
 		calendars: Map<Id, CalendarInfo>,
 		existingEvent?: CalendarEvent
 	) {
 		this._distributor = distributor
+		this._api = api
 		this.summary = stream("")
 		this.calendars = Array.from(calendars.values())
 		this.selectedCalendar = stream(this.calendars[0])
 		this.attendees = existingEvent && existingEvent.attendees.slice() || []
 		this.organizer = existingEvent && existingEvent.organizer || getDefaultSenderFromUser(userController)
-		this.possibleOrganizers = getEnabledMailAddressesWithUser(mailboxDetail, userController.user)
+		this.possibleOrganizers = getEnabledMailAddressesWithUser(mailboxDetail, userController.userGroupInfo)
 		this.location = stream("")
 		this.note = stream("")
 		this.allDay = stream(true)
@@ -341,7 +346,7 @@ export class CalendarEventViewModel {
 		// if (isOwnEvent && existingEvent.attendees.length) {
 		// 	sendCalendarCancellation(existingEvent, existingEvent.attendees.map(a => a.address))
 		// }
-		return erase(this.existingEvent).catch(NotFoundError, noOp)
+		return this._api.erase(this.existingEvent).catch(NotFoundError, noOp)
 	}
 
 	onOkPressed(): boolean {
