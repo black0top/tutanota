@@ -346,7 +346,11 @@ export class CalendarEventViewModel {
 		// if (isOwnEvent && existingEvent.attendees.length) {
 		// 	sendCalendarCancellation(existingEvent, existingEvent.attendees.map(a => a.address))
 		// }
-		return this._api.erase(this.existingEvent).catch(NotFoundError, noOp)
+		if (this.existingEvent) {
+			return this._api.erase(this.existingEvent).catch(NotFoundError, noOp)
+		} else {
+			return Promise.resolve(true)
+		}
 	}
 
 	onOkPressed(): boolean {

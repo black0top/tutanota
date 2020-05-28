@@ -204,7 +204,7 @@ function init({
 	mailboxDetail: makeMailboxDetail(),
 	calendars: makeCalendars(),
 	existinngEvent: CalendarEvent
-}: {userController: IUserController, distributor: }): CalendarEventViewModel {
+}: {userController: IUserController, distributor: CalendarUpdateDistributor}): CalendarEventViewModel {
 	return new CalendarEventViewModel(userController, distributor, mailboxDetail, now, calendars, existingEvent)
 }
 

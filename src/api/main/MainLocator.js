@@ -14,6 +14,7 @@ import type {CalendarEvent} from "../entities/tutanota/CalendarEvent"
 import {Notifications} from "../../gui/Notifications"
 import type {CalendarEventViewModel} from "../../calendar/CalendarEventViewModel"
 import {ClientsideAPI} from "./Entity"
+import type {API} from "./Entity"
 
 assertMainOrNode()
 
