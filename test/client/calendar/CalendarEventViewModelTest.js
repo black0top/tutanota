@@ -4,6 +4,7 @@ import {CalendarEventViewModel} from "../../../src/calendar/CalendarEventViewMod
 import {downcast} from "../../../src/api/common/utils/Utils"
 import {LazyLoaded} from "../../../src/api/common/utils/LazyLoaded"
 import type {MailboxDetail} from "../../../src/mail/MailModel"
+import type {CalendarEvent} from "../../../src/api/entities/tutanota/CalendarEvent"
 import {createCalendarEvent} from "../../../src/api/entities/tutanota/CalendarEvent"
 import {createGroupInfo} from "../../../src/api/entities/sys/GroupInfo"
 import type {ShareCapabilityEnum} from "../../../src/api/common/TutanotaConstants"
@@ -18,11 +19,13 @@ import {createGroup} from "../../../src/api/entities/sys/Group"
 import {createMailboxGroupRoot} from "../../../src/api/entities/tutanota/MailboxGroupRoot"
 import type {CalendarUpdateDistributor} from "../../../src/calendar/CalendarUpdateDistributor"
 import type {IUserController} from "../../../src/api/main/UserController"
-import type {CalendarEvent} from "../../../src/api/entities/tutanota/CalendarEvent"
 import type {API} from "../../../src/api/main/Entity"
+import {createEncryptedMailAddress} from "../../../src/api/entities/tutanota/EncryptedMailAddress"
 
 const calendarGroupId = "0"
 const now = new Date(2020, 4, 25, 13, 40)
+const mailAddress = "address@tutanota.com"
+const userId = "12356"
 
 o.spec("CalendarEventViewModel", function () {
 
@@ -157,24 +160,74 @@ o.spec("CalendarEventViewModel", function () {
 		o(viewModel.canModifyOrganizer()).equals(false)
 	})
 
-	o.only("delete event", async function () {
-		const calendars = makeCalendars("shared")
-		const userController = makeUserController()
-		const distributor = makeDistributor()
-		addCapability(userController.user, calendarGroupId, ShareCapability.Write)
-		const attendee = createCalendarEventAttendee()
-		const existingEvent = createCalendarEvent({
-			_id: ["listid", "calendarid"],
-			summary: "existing event",
-			startTime: new Date(2020, 4, 26, 12),
-			endTime: new Date(2020, 4, 26, 13),
-			organizer: "another-user@provider.com",
-			_ownerGroup: calendarGroupId,
-			attendees: [attendee]
+	o.spec("delete event", function () {
+		o("own event with attendees in own calendar", async function () {
+			const calendars = makeCalendars("own")
+			const distributor = makeDistributor()
+			const attendee = makeAttendee()
+			const api = makeApi()
+			const existingEvent = createCalendarEvent({
+				_id: ["listid", "calendarid"],
+				_ownerGroup: calendarGroupId,
+				organizer: mailAddress,
+				attendees: [attendee]
+			})
+			const viewModel = init({calendars, existingEvent, api, distributor})
+			await viewModel.deleteEvent()
+			o(api.erase.calls.map(c => c.args)).deepEquals([[existingEvent]])
+			o(distributor.sendCancellation.calls.map(c => c.args)).deepEquals([[existingEvent, [attendee.address]]])
 		})
-		const viewModel = init({calendars, userController, existingEvent})
-		await viewModel.deleteEvent()
-		o(distributor.sendCancellation.calls).deepEquals([[existingEvent, attendee]])
+
+		o("own event without attendees in own calendar", async function () {
+			const calendars = makeCalendars("own")
+			const distributor = makeDistributor()
+			const api = makeApi()
+			const existingEvent = createCalendarEvent({
+				_id: ["listid", "calendarid"],
+				_ownerGroup: calendarGroupId,
+				organizer: mailAddress,
+				attendees: []
+			})
+			const viewModel = init({calendars, existingEvent, api, distributor})
+			await viewModel.deleteEvent()
+			o(api.erase.calls.map(c => c.args)).deepEquals([[existingEvent]])
+			o(distributor.sendCancellation.calls).deepEquals([])
+		})
+
+		o("invite in own calendar", async function () {
+			const calendars = makeCalendars("own")
+			const distributor = makeDistributor()
+			const api = makeApi()
+			const attendee = makeAttendee()
+			const existingEvent = createCalendarEvent({
+				_id: ["listid", "calendarid"],
+				_ownerGroup: calendarGroupId,
+				organizer: "another-address@example.com",
+				attendees: [attendee],
+				isCopy: true,
+			})
+			const viewModel = init({calendars, existingEvent, api, distributor})
+			await viewModel.deleteEvent()
+			o(api.erase.calls.map(c => c.args)).deepEquals([[existingEvent]])
+			o(distributor.sendCancellation.calls).deepEquals([])
+		})
+
+		o("in shared calendar", async function () {
+			const calendars = makeCalendars("shared")
+			const distributor = makeDistributor()
+			const api = makeApi()
+			const attendee = makeAttendee()
+			const existingEvent = createCalendarEvent({
+				_id: ["listid", "calendarid"],
+				_ownerGroup: calendarGroupId,
+				organizer: mailAddress,
+				attendees: [attendee],
+			})
+			const viewModel = init({calendars, existingEvent, api, distributor})
+			await viewModel.deleteEvent()
+			o(api.erase.calls.map(c => c.args)).deepEquals([[existingEvent]])
+			o(distributor.sendCancellation.calls).deepEquals([])
+		})
 	})
 })
 
@@ -213,13 +266,13 @@ function makeCalendars(type: "own" | "shared"): Map<string, CalendarInfo> {
 
 function makeUserController(): IUserController {
 	return downcast({
-		user: createUser(),
+		user: createUser({_id: userId}),
 		props: {
-			defaultSender: "address@tutanota.com",
+			defaultSender: mailAddress,
 		},
 		userGroupInfo: createGroupInfo({
 			mailAddressAliases: [],
-			mailAddress: "address@tutanota.com",
+			mailAddress: mailAddress,
 		}),
 		userSettingsGroupRoot: {
 			timeFormat: TimeFormat.TWENTY_FOUR_HOURS,
@@ -234,12 +287,20 @@ function addCapability(user: User, groupId: Id, capability: ShareCapabilityEnum)
 	}))
 }
 
+function makeAttendee() {
+	return createCalendarEventAttendee({
+		address: createEncryptedMailAddress({
+			address: "attendee@example.com"
+		})
+	})
+}
+
 function makeMailboxDetail(): MailboxDetail {
 	return {
 		mailbox: createMailBox(),
 		folders: [],
 		mailGroupInfo: createGroupInfo(),
-		mailGroup: createGroup(),
+		mailGroup: createGroup({user: userId}),
 		mailboxGroupRoot: createMailboxGroupRoot(),
 	}
 }
@@ -255,8 +316,8 @@ function makeDistributor(): CalendarUpdateDistributor {
 
 function makeApi(): API {
 	return {
-		erase(entity) {
+		erase: o.spy((entity) => {
 			return Promise.resolve()
-		}
+		})
 	}
 }

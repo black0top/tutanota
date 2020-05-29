@@ -334,20 +334,24 @@ export class CalendarEventViewModel {
 		return !this._isInSharedCalendar
 	}
 
-	canModifyOrganizer(): bool {
+	canModifyOrganizer(): boolean {
 		return !this._isInSharedCalendar && (!this.existingEvent || !this.existingEvent.isCopy) && this.attendees.length === 0
+	}
+
+	_viewingOwnEvent(): boolean {
+		return !this.existingEvent || (!this.existingEvent.isCopy && this.possibleOrganizers.includes(this.existingEvent.organizer))
 	}
 
 	/**
 	 * @return Promise<bool> whether to close dialog
 	 */
 	deleteEvent(): Promise<bool> {
-		// TODO: invite
-		// if (isOwnEvent && existingEvent.attendees.length) {
-		// 	sendCalendarCancellation(existingEvent, existingEvent.attendees.map(a => a.address))
-		// }
-		if (this.existingEvent) {
-			return this._api.erase(this.existingEvent).catch(NotFoundError, noOp)
+		const event = this.existingEvent
+		if (event) {
+			const awaitCancellation = this._viewingOwnEvent() && !this._isInSharedCalendar && event.attendees.length
+				? this._distributor.sendCancellation(event, event.attendees.map(a => a.address))
+				: Promise.resolve()
+			return awaitCancellation.then(() => this._api.erase(event)).catch(NotFoundError, noOp)
 		} else {
 			return Promise.resolve(true)
 		}
@@ -481,8 +485,8 @@ export class CalendarEventViewModel {
 					// Reset permissions because server will assign them
 					downcast(newEvent)._permissions = null
 
-					// We don't want to pass event from ics file to the facade because it's just a template event and there's nothing ot clean
-					// up.
+					// We don't want to pass event from ics file to the facade because it's just a template event and there's nothing to
+					// clean up.
 					const oldEventToPass = safeExistingEvent && safeExistingEvent._ownerGroup ? safeExistingEvent : null
 					updatePromise = worker.createCalendarEvent(newEvent, newAlarms, oldEventToPass)
 				} else {
