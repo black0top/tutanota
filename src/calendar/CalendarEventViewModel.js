@@ -30,11 +30,10 @@ import {
 } from "./CalendarUtils"
 import {clone, downcast, neverNull, noOp} from "../api/common/utils/Utils"
 import {generateEventElementId, isAllDayEvent} from "../api/common/utils/CommonCalendarUtils"
-import {incrementByRepeatPeriod} from "./CalendarModel"
+import {CalendarModel, incrementByRepeatPeriod} from "./CalendarModel"
 import m from "mithril"
 import {createEncryptedMailAddress} from "../api/entities/tutanota/EncryptedMailAddress"
 import {remove} from "../api/common/utils/ArrayUtils"
-import type {API} from "../api/main/Entity"
 import {load} from "../api/main/Entity"
 import {NotFoundError} from "../api/common/error/RestError"
 import {worker} from "../api/main/WorkerClient"
@@ -74,19 +73,19 @@ export class CalendarEventViewModel {
 	_user: User;
 	+_isInSharedCalendar: boolean;
 	+_distributor: CalendarUpdateDistributor;
-	+_api: API;
+	+_calendarModel: CalendarModel;
 
 	constructor(
 		userController: IUserController,
 		distributor: CalendarUpdateDistributor,
-		api: API,
+		calendarModel: CalendarModel,
 		mailboxDetail: MailboxDetail,
 		date: Date,
 		calendars: Map<Id, CalendarInfo>,
 		existingEvent?: ?CalendarEvent
 	) {
 		this._distributor = distributor
-		this._api = api
+		this._calendarModel = calendarModel
 		this.summary = stream("")
 		this.calendars = Array.from(calendars.values())
 		this.selectedCalendar = stream(this.calendars[0])
@@ -351,7 +350,7 @@ export class CalendarEventViewModel {
 			const awaitCancellation = this._viewingOwnEvent() && !this._isInSharedCalendar && event.attendees.length
 				? this._distributor.sendCancellation(event, event.attendees.map(a => a.address))
 				: Promise.resolve()
-			return awaitCancellation.then(() => this._api.erase(event)).catch(NotFoundError, noOp)
+			return awaitCancellation.then(() => this._calendarModel.deleteEvent(event)).catch(NotFoundError, noOp)
 		} else {
 			return Promise.resolve(true)
 		}
@@ -488,9 +487,9 @@ export class CalendarEventViewModel {
 					// We don't want to pass event from ics file to the facade because it's just a template event and there's nothing to
 					// clean up.
 					const oldEventToPass = safeExistingEvent && safeExistingEvent._ownerGroup ? safeExistingEvent : null
-					updatePromise = worker.createCalendarEvent(newEvent, newAlarms, oldEventToPass)
+					updatePromise = this._calendarModel.createEvent(newEvent, newAlarms, oldEventToPass)
 				} else {
-					updatePromise = worker.updateCalendarEvent(newEvent, newAlarms, safeExistingEvent)
+					updatePromise = this._calendarModel.updateEvent(newEvent, newAlarms, safeExistingEvent)
 				}
 
 				// TODO: send out invites

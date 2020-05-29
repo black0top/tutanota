@@ -13,8 +13,9 @@ import type {CalendarInfo} from "../../calendar/CalendarView"
 import type {CalendarEvent} from "../entities/tutanota/CalendarEvent"
 import {Notifications} from "../../gui/Notifications"
 import type {CalendarEventViewModel} from "../../calendar/CalendarEventViewModel"
-import {ClientsideAPI} from "./Entity"
 import type {API} from "./Entity"
+import {ClientsideAPI} from "./Entity"
+import type {CalendarModel} from "../../calendar/CalendarModel"
 
 assertMainOrNode()
 
@@ -57,11 +58,13 @@ export function initLocator(worker: WorkerClient) {
 			locator.calendarUpdateDistributor(),
 			(asyncImport(importBase, `${env.rootPathPrefix}src/calendar/CalendarEventViewModel.js`):
 				Promise<{CalendarEventViewModel: Class<CalendarEventViewModel>}>),
-		]).then(([distributor, {CalendarEventViewModel}]) =>
+			(asyncImport(importBase, `${env.rootPathPrefix}src/calendar/CalendarModel.js`):
+				Promise<{calendarModel: CalendarModel}>),
+		]).then(([distributor, {CalendarEventViewModel}, {calendarModel}]) =>
 			new CalendarEventViewModel(
 				logins.getUserController(),
 				distributor,
-				locator.api,
+				calendarModel,
 				mailboxDetail,
 				date,
 				calendars,

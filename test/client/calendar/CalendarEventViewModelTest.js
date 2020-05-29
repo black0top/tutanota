@@ -19,8 +19,8 @@ import {createGroup} from "../../../src/api/entities/sys/Group"
 import {createMailboxGroupRoot} from "../../../src/api/entities/tutanota/MailboxGroupRoot"
 import type {CalendarUpdateDistributor} from "../../../src/calendar/CalendarUpdateDistributor"
 import type {IUserController} from "../../../src/api/main/UserController"
-import type {API} from "../../../src/api/main/Entity"
 import {createEncryptedMailAddress} from "../../../src/api/entities/tutanota/EncryptedMailAddress"
+import {CalendarModel} from "../../../src/calendar/CalendarModel"
 
 const calendarGroupId = "0"
 const now = new Date(2020, 4, 25, 13, 40)
@@ -165,39 +165,39 @@ o.spec("CalendarEventViewModel", function () {
 			const calendars = makeCalendars("own")
 			const distributor = makeDistributor()
 			const attendee = makeAttendee()
-			const api = makeApi()
+			const calendarModel = makeCalendarModel()
 			const existingEvent = createCalendarEvent({
 				_id: ["listid", "calendarid"],
 				_ownerGroup: calendarGroupId,
 				organizer: mailAddress,
 				attendees: [attendee]
 			})
-			const viewModel = init({calendars, existingEvent, api, distributor})
+			const viewModel = init({calendars, existingEvent, calendarModel, distributor})
 			await viewModel.deleteEvent()
-			o(api.erase.calls.map(c => c.args)).deepEquals([[existingEvent]])
+			o(calendarModel.deleteEvent.calls.map(c => c.args)).deepEquals([[existingEvent]])
 			o(distributor.sendCancellation.calls.map(c => c.args)).deepEquals([[existingEvent, [attendee.address]]])
 		})
 
 		o("own event without attendees in own calendar", async function () {
 			const calendars = makeCalendars("own")
 			const distributor = makeDistributor()
-			const api = makeApi()
+			const calendarModel = makeCalendarModel()
 			const existingEvent = createCalendarEvent({
 				_id: ["listid", "calendarid"],
 				_ownerGroup: calendarGroupId,
 				organizer: mailAddress,
 				attendees: []
 			})
-			const viewModel = init({calendars, existingEvent, api, distributor})
+			const viewModel = init({calendars, existingEvent, calendarModel, distributor})
 			await viewModel.deleteEvent()
-			o(api.erase.calls.map(c => c.args)).deepEquals([[existingEvent]])
+			o(calendarModel.deleteEvent.calls.map(c => c.args)).deepEquals([[existingEvent]])
 			o(distributor.sendCancellation.calls).deepEquals([])
 		})
 
 		o("invite in own calendar", async function () {
 			const calendars = makeCalendars("own")
 			const distributor = makeDistributor()
-			const api = makeApi()
+			const calendarModel = makeCalendarModel()
 			const attendee = makeAttendee()
 			const existingEvent = createCalendarEvent({
 				_id: ["listid", "calendarid"],
@@ -206,16 +206,18 @@ o.spec("CalendarEventViewModel", function () {
 				attendees: [attendee],
 				isCopy: true,
 			})
-			const viewModel = init({calendars, existingEvent, api, distributor})
+			const viewModel = init({calendars, existingEvent, calendarModel, distributor})
 			await viewModel.deleteEvent()
-			o(api.erase.calls.map(c => c.args)).deepEquals([[existingEvent]])
+			o(calendarModel.deleteEvent.calls.map(c => c.args)).deepEquals([[existingEvent]])
 			o(distributor.sendCancellation.calls).deepEquals([])
 		})
 
 		o("in shared calendar", async function () {
 			const calendars = makeCalendars("shared")
+			const userController = makeUserController()
+			addCapability(userController.user, calendarGroupId, ShareCapability.Write)
 			const distributor = makeDistributor()
-			const api = makeApi()
+			const calendarModel = makeCalendarModel()
 			const attendee = makeAttendee()
 			const existingEvent = createCalendarEvent({
 				_id: ["listid", "calendarid"],
@@ -223,26 +225,33 @@ o.spec("CalendarEventViewModel", function () {
 				organizer: mailAddress,
 				attendees: [attendee],
 			})
-			const viewModel = init({calendars, existingEvent, api, distributor})
+			const viewModel = init({calendars, existingEvent, calendarModel, distributor})
 			await viewModel.deleteEvent()
-			o(api.erase.calls.map(c => c.args)).deepEquals([[existingEvent]])
+			o(calendarModel.deleteEvent.calls.map(c => c.args)).deepEquals([[existingEvent]])
 			o(distributor.sendCancellation.calls).deepEquals([])
 		})
 	})
+
+	o("create event", async function () {
+		const calendars = makeCalendars("own")
+		const viewModel = init({calendars, existingEvent: null})
+
+		viewModel.onOkPressed()
+	})
 })
 
-function init({userController, distributor, mailboxDetail, calendars, existingEvent, api}: {
+function init({userController, distributor, mailboxDetail, calendars, existingEvent, calendarModel}: {
 	userController?: IUserController,
 	distributor?: CalendarUpdateDistributor,
 	mailboxDetail?: MailboxDetail,
 	calendars: Map<Id, CalendarInfo>,
-	api?: API,
+	calendarModel?: CalendarModel,
 	existingEvent: ?CalendarEvent,
 }): CalendarEventViewModel {
 	return new CalendarEventViewModel(
 		userController || makeUserController(),
 		distributor || makeDistributor(),
-		api || makeApi(),
+		calendarModel || makeCalendarModel(),
 		mailboxDetail || makeMailboxDetail(),
 		now,
 		calendars,
@@ -314,10 +323,10 @@ function makeDistributor(): CalendarUpdateDistributor {
 	}
 }
 
-function makeApi(): API {
+function makeCalendarModel(): CalendarModel {
 	return {
-		erase: o.spy((entity) => {
-			return Promise.resolve()
-		})
+		createEvent: o.spy(() => Promise.resolve()),
+		updateEvent: o.spy(() => Promise.resolve()),
+		deleteEvent: o.spy(() => Promise.resolve()),
 	}
 }

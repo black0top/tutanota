@@ -1,7 +1,6 @@
 //@flow
 import type {CalendarMonthTimeRange} from "./CalendarUtils"
 import {
-	assignEventId,
 	getAllDayDateForTimezone,
 	getAllDayDateUTCFromZone,
 	getDiffInDays,
@@ -40,7 +39,6 @@ import {client} from "../misc/ClientDetector"
 import {insertIntoSortedArray} from "../api/common/utils/ArrayUtils"
 import m from "mithril"
 import {UserTypeRef} from "../api/entities/sys/User"
-import type {CalendarGroupRoot} from "../api/entities/tutanota/CalendarGroupRoot"
 import {CalendarGroupRootTypeRef} from "../api/entities/tutanota/CalendarGroupRoot"
 import {GroupInfoTypeRef} from "../api/entities/sys/GroupInfo"
 import type {CalendarInfo} from "./CalendarView"
@@ -329,13 +327,20 @@ export function loadCalendarInfos(): Promise<Map<Id, CalendarInfo>> {
 		.tap(() => m.redraw())
 }
 
+// Complete as needed
+export interface CalendarModel {
+	createEvent(event: CalendarEvent, alarmInfos: Array<AlarmInfo>, oldEvent: ?CalendarEvent): Promise<void>;
 
-class CalendarModel {
+	/** Update existing event when time did not change */
+	updateEvent(newEvent: CalendarEvent, newAlarms: Array<AlarmInfo>, existingEvent: CalendarEvent): Promise<void>;
+
+	deleteEvent(event: CalendarEvent): Promise<void>;
+}
+
+export class CalendarModelImpl implements CalendarModel {
 	_notifications: Notifications;
 	_scheduledNotifications: Map<string, TimeoutID>;
-	/**
-	 * Map from calendar event element id to the deferred object with a promise of getting CREATE event for this calendar event
-	 */
+	/** Map from calendar event element id to the deferred object with a promise of getting CREATE event for this calendar event */
 	_pendingAlarmRequests: Map<string, DeferredObject<void>>;
 
 	constructor(notifications: Notifications, eventController: EventController) {
@@ -347,6 +352,20 @@ class CalendarModel {
 				this._entityEventsReceived(updates)
 			})
 		}
+	}
+
+	/** Create new event or re-create existing one when significant parts (like start time) have changed */
+	createEvent(event: CalendarEvent, alarmInfos: Array<AlarmInfo>, oldEvent: ?CalendarEvent): Promise<void> {
+		return worker.createCalendarEvent(event, alarmInfos, oldEvent)
+	}
+
+	/** Update existing event when time did not change */
+	updateEvent(newEvent: CalendarEvent, newAlarms: Array<AlarmInfo>, existingEvent: CalendarEvent): Promise<void> {
+		return worker.updateCalendarEvent(newEvent, newAlarms, existingEvent)
+	}
+
+	deleteEvent(event: CalendarEvent): Promise<void> {
+		return erase(event)
 	}
 
 	_processCalendarReplies() {
@@ -483,12 +502,6 @@ class CalendarModel {
 		}
 	}
 
-	createEvent(newEvent: CalendarEvent, newAlarms: Array<AlarmInfo>, existingEvent: CalendarEvent,
-	            groupRoot: CalendarGroupRoot): Promise<void> {
-		assignEventId(newEvent, getTimeZone(), groupRoot)
-		return worker.createCalendarEvent(newEvent, newAlarms, existingEvent)
-	}
-
 	_scheduleNotification(identifier: string, event: CalendarEvent, time: Date) {
 		this._runAtDate(time, identifier, () => {
 			const title = lang.get("reminder_label")
@@ -564,7 +577,7 @@ class CalendarModel {
 	}
 }
 
-export const calendarModel = new CalendarModel(new Notifications(), locator.eventController)
+export const calendarModel = new CalendarModelImpl(new Notifications(), locator.eventController)
 
 if (replaced) {
 	Object.assign(calendarModel, replaced.calendarModel)
