@@ -34,7 +34,8 @@ import {incrementByRepeatPeriod} from "./CalendarModel"
 import m from "mithril"
 import {createEncryptedMailAddress} from "../api/entities/tutanota/EncryptedMailAddress"
 import {remove} from "../api/common/utils/ArrayUtils"
-import {erase, load} from "../api/main/Entity"
+import type {API} from "../api/main/Entity"
+import {load} from "../api/main/Entity"
 import {NotFoundError} from "../api/common/error/RestError"
 import {worker} from "../api/main/WorkerClient"
 import type {CalendarRepeatRule} from "../api/entities/tutanota/CalendarRepeatRule"
@@ -44,7 +45,6 @@ import type {User} from "../api/entities/sys/User"
 import {incrementDate} from "../api/common/utils/DateUtils"
 import type {CalendarUpdateDistributor} from "./CalendarUpdateDistributor"
 import type {IUserController} from "../api/main/UserController"
-import type {API} from "../api/main/Entity"
 
 const TIMESTAMP_ZERO_YEAR = 1970
 
@@ -83,7 +83,7 @@ export class CalendarEventViewModel {
 		mailboxDetail: MailboxDetail,
 		date: Date,
 		calendars: Map<Id, CalendarInfo>,
-		existingEvent?: CalendarEvent
+		existingEvent?: ?CalendarEvent
 	) {
 		this._distributor = distributor
 		this._api = api
