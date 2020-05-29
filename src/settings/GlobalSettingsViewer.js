@@ -7,19 +7,24 @@ import * as AddSpamRuleDialog from "./AddSpamRuleDialog"
 import type {SpamRuleFieldTypeEnum, SpamRuleTypeEnum} from "../api/common/TutanotaConstants"
 import {getSparmRuleField, GroupType, OperationType, SpamRuleFieldType, SpamRuleType} from "../api/common/TutanotaConstants"
 import {getCustomMailDomains, getUserGroupMemberships, neverNull, noOp, objectEntries} from "../api/common/utils/Utils"
+import type {CustomerServerProperties} from "../api/entities/sys/CustomerServerProperties"
 import {CustomerServerPropertiesTypeRef} from "../api/entities/sys/CustomerServerProperties"
 import {worker} from "../api/main/WorkerClient"
 import {GENERATED_MAX_ID} from "../api/common/EntityFunctions"
 import {DropDownSelector} from "../gui/base/DropDownSelector"
 import stream from "mithril/stream/stream.js"
 import {logins} from "../api/main/LoginController"
+import type {AuditLogEntry} from "../api/entities/sys/AuditLogEntry"
 import {AuditLogEntryTypeRef} from "../api/entities/sys/AuditLogEntry"
 import {formatDateTime, formatDateTimeFromYesterdayOn} from "../misc/Formatter"
+import type {Customer} from "../api/entities/sys/Customer"
 import {CustomerTypeRef} from "../api/entities/sys/Customer"
 import {Dialog} from "../gui/base/Dialog"
+import type {GroupInfo} from "../api/entities/sys/GroupInfo"
 import {GroupInfoTypeRef} from "../api/entities/sys/GroupInfo"
 import {NotAuthorizedError, PreconditionFailedError} from "../api/common/error/RestError"
 import {LazyLoaded} from "../api/common/utils/LazyLoaded"
+import type {CustomerInfo} from "../api/entities/sys/CustomerInfo"
 import {CustomerInfoTypeRef} from "../api/entities/sys/CustomerInfo"
 import {loadEnabledTeamMailGroups, loadEnabledUserMailGroups, loadGroupDisplayName} from "./LoadingUtils"
 import {GroupTypeRef} from "../api/entities/sys/Group"
@@ -37,11 +42,6 @@ import {ButtonType} from "../gui/base/ButtonN"
 import {showAddDomainDialog} from "./AddDomainDialog"
 import {DomainDnsStatus} from "./DomainDnsStatus"
 import {showDnsCheckDialog} from "./CheckDomainDnsStatusDialog"
-import type {CustomerServerProperties} from "../api/entities/sys/CustomerServerProperties"
-import type {Customer} from "../api/entities/sys/Customer"
-import type {CustomerInfo} from "../api/entities/sys/CustomerInfo"
-import type {AuditLogEntry} from "../api/entities/sys/AuditLogEntry"
-import type {GroupInfo} from "../api/entities/sys/GroupInfo"
 import type {DomainInfo} from "../api/entities/sys/DomainInfo"
 
 assertMainOrNode()
@@ -85,7 +85,8 @@ export class GlobalSettingsViewer implements UpdatableSettingsViewer {
 			{name: lang.get("yes_label"), value: true},
 			{name: lang.get("no_label"), value: false}
 		], saveIpAddress, 250).setSelectionChangedHandler(v => {
-			update(Object.assign({}, this._props(), {saveEncryptedIpAddressInSession: v}))
+			const newProps: CustomerServerProperties = Object.assign({}, this._props(), {saveEncryptedIpAddressInSession: v})
+			update(newProps)
 		})
 
 		let requirePasswordUpdateAfterReset = stream(false)
@@ -94,7 +95,8 @@ export class GlobalSettingsViewer implements UpdatableSettingsViewer {
 			{name: lang.get("yes_label"), value: true},
 			{name: lang.get("no_label"), value: false}
 		], requirePasswordUpdateAfterReset, 250).setSelectionChangedHandler(v => {
-			update(Object.assign({}, this._props(), {requirePasswordUpdateAfterReset: v}))
+			const newProps: CustomerServerProperties = Object.assign({}, this._props(), {requirePasswordUpdateAfterReset: v})
+			update(newProps)
 		})
 
 		this.view = () => {

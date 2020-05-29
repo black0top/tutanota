@@ -995,18 +995,18 @@ export class MailEditor {
 		return Promise.all(resolvedRecipients.map(r => {
 			const {contact} = r
 			if (contact) {
-				if (!recipientContact._id && (!logins.getUserController().props.noAutomaticContacts
+				if (!contact._id && (!logins.getUserController().props.noAutomaticContacts
 					|| (isExternal(r) && this._confidentialButtonState))) {
 					if (isExternal(r) && this._confidentialButtonState) {
-						recipientContact.presharedPassword = this.getPasswordField(r).value().trim()
+						contact.presharedPassword = this.getPasswordField(r).value().trim()
 					}
 					return LazyContactListId.getAsync().then(listId => {
 						return setup(listId, contact)
 					})
-				} else if (recipientContact._id && isExternal(r) && this._confidentialButtonState
-					&& recipientContact.presharedPassword !== this.getPasswordField(r).value().trim()) {
-					recipientContact.presharedPassword = this.getPasswordField(r).value().trim()
-					return update(recipientContact)
+				} else if (contact._id && isExternal(r) && this._confidentialButtonState
+					&& contact.presharedPassword !== this.getPasswordField(r).value().trim()) {
+					contact.presharedPassword = this.getPasswordField(r).value().trim()
+					return update(contact)
 				} else {
 					return Promise.resolve()
 				}

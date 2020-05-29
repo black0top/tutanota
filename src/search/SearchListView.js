@@ -1,14 +1,17 @@
 // @flow
 import m from "mithril"
 import {List} from "../gui/base/List"
+import type {ListElement} from "../api/common/EntityFunctions"
 import {GENERATED_MAX_ID, isSameId, isSameTypeRef, sortCompareByReverseId, TypeRef} from "../api/common/EntityFunctions"
 import {assertMainOrNode} from "../api/Env"
 import {lang} from "../misc/LanguageViewModel"
 import {size} from "../gui/size"
 import {MailRow} from "../mail/MailListView"
+import type {Mail} from "../api/entities/tutanota/Mail"
 import {MailTypeRef} from "../api/entities/tutanota/Mail"
 import {erase, load} from "../api/main/Entity"
 import {ContactRow} from "../contacts/ContactListView"
+import type {Contact} from "../api/entities/tutanota/Contact"
 import {ContactTypeRef} from "../api/entities/tutanota/Contact"
 import type {SearchView} from "./SearchView"
 import {NotFoundError} from "../api/common/error/RestError"
@@ -21,8 +24,6 @@ import {logins} from "../api/main/LoginController"
 import {hasMoreResults} from "./SearchModel"
 import {archiveMails, moveToInbox, showDeleteConfirmationDialog} from "../mail/MailUtils"
 import {Dialog} from "../gui/base/Dialog"
-import type {Mail} from "../api/entities/tutanota/Mail"
-import type {Contact} from "../api/entities/tutanota/Contact"
 
 assertMainOrNode()
 
@@ -231,8 +232,8 @@ export class SearchListView {
 		return Promise.resolve()
 	}
 
-	_loadAndFilterInstances<T>(type: TypeRef<T>, toLoad: IdTuple[], currentResult: SearchResult,
-	                           startIndex: number): Promise<T[]> {
+	_loadAndFilterInstances<T: ListElement>(type: TypeRef<T>, toLoad: IdTuple[], currentResult: SearchResult,
+	                                        startIndex: number): Promise<T[]> {
 		return Promise
 			.map(toLoad,
 				(id) => load(type, id).catch(NotFoundError, () => console.log("mail not found")),

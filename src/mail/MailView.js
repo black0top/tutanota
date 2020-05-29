@@ -631,10 +631,10 @@ export class MailView implements CurrentView {
 				(name) => this._checkFolderName(name, mailGroupId))
 			             .then((name) =>
 				             locator.mailModel.getMailboxDetailsForMailGroup(mailGroupId)
-				                      .then((mailboxDetails) =>
-					                      worker.createMailFolder(name,
-						                      getInboxFolder(mailboxDetails.folders)._id,
-						                      mailGroupId)))
+				                    .then((mailboxDetails) =>
+					                    worker.createMailFolder(name,
+						                    getInboxFolder(mailboxDetails.folders)._id,
+						                    mailGroupId)))
 		}, () => Icons.Add).setColors(ButtonColors.Nav)
 	}
 
@@ -652,7 +652,7 @@ export class MailView implements CurrentView {
 					return Dialog.showTextInputDialog("folderNameRename_label", "folderName_label", null,
 						getFolderName(folder), (name) => this._checkFolderName(name, mailGroupId))
 					             .then((newName) => {
-						             let renamedFolder = Object.assign({}, folder, {name: newName})
+						             const renamedFolder: MailFolder = Object.assign({}, folder, {name: newName})
 						             return update(renamedFolder)
 					             })
 				}
@@ -686,15 +686,15 @@ export class MailView implements CurrentView {
 
 	_checkFolderName(name: string, mailGroupId: Id): Promise<?TranslationKey> {
 		return locator.mailModel.getMailboxDetailsForMailGroup(mailGroupId)
-		                .then((mailboxDetails) => {
-			                if (name.trim() === "") {
-				                return "folderNameNeutral_msg"
-			                } else if (mailboxDetails.folders.find(f => f.name === name)) {
-				                return "folderNameInvalidExisting_msg"
-			                } else {
-				                return null
-			                }
-		                })
+		              .then((mailboxDetails) => {
+			              if (name.trim() === "") {
+				              return "folderNameNeutral_msg"
+			              } else if (mailboxDetails.folders.find(f => f.name === name)) {
+				              return "folderNameInvalidExisting_msg"
+			              } else {
+				              return null
+			              }
+		              })
 	}
 
 	_finallyDeleteCustomMailFolder(folder: MailFolder) {
